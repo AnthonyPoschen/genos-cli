@@ -24,8 +24,8 @@ const (
 )
 
 // Keyring is the OS credential store. Get and Set key the item by API origin.
-// The production store uses service "genos" and the username attribute equal
-// to that origin.
+// The production store uses service "genos" and attribute host equal to that
+// origin.
 type Keyring interface {
 	Get(origin string) (string, error)
 	Set(origin, secret string) error
@@ -58,9 +58,13 @@ var ErrNotFound = errors.New("no token found")
 // ErrLocalEnv refuses the operator env file. Customer tokens do not live there.
 var ErrLocalEnv = errors.New("refusing to read local.env")
 
-// KeyringItem is the service and account passed to the OS keyring.
-func KeyringItem(origin string) (service, account string) {
-	return Service, origin
+// KeyringAttributes is the Secret Service lookup for one API origin.
+// host is the origin. The username attribute is not used.
+func KeyringAttributes(origin string) map[string]string {
+	return map[string]string{
+		"service": Service,
+		"host":    origin,
+	}
 }
 
 // ResolveToken returns the first hit among env, keyring, and file.

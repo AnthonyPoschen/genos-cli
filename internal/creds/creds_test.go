@@ -209,10 +209,13 @@ func TestResolveTokenSymlinkToLocalEnv(t *testing.T) {
 	}
 }
 
-func TestKeyringItem(t *testing.T) {
-	service, account := KeyringItem(origin)
-	if service != "genos" || account != origin {
-		t.Fatalf("item = %s %s", service, account)
+func TestKeyringAttributesUseHost(t *testing.T) {
+	attributes := KeyringAttributes(origin)
+	if attributes["service"] != "genos" || attributes["host"] != origin {
+		t.Fatalf("attributes = %#v", attributes)
+	}
+	if _, ok := attributes["username"]; ok {
+		t.Fatal("username attribute must not be used")
 	}
 }
 
