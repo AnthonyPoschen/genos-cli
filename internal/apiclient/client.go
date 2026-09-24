@@ -197,6 +197,9 @@ func (c *Client) RequestDeviceCode(ctx context.Context, machineName string) (Dev
 	if err != nil {
 		return DeviceCode{}, err
 	}
+	if status == http.StatusNotFound {
+		return DeviceCode{}, errors.New("device login requires an upcoming Genos API; use genos auth token (PAT) instead")
+	}
 	if status < 200 || status >= 300 {
 		return DeviceCode{}, apiError(status, data)
 	}
