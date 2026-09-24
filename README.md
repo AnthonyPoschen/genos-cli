@@ -25,7 +25,7 @@ That file has no token. `http` is allowed only for `localhost`, `127.0.0.1`, and
 The first match wins. A set `GENOS_TOKEN` is never written to disk.
 
 1. `GENOS_TOKEN`, when it is set and non-empty.
-2. The OS keyring, service `genos`, account equal to the API origin.
+2. The OS keyring, service `genos`, attribute `host` equal to the API origin (same item the Omarchy panel uses; the `username`/`account` attribute is not used).
 3. `$XDG_CONFIG_HOME/genos/credentials.json` (default `~/.config/genos/credentials.json`), mode `0600`:
 
 ```json
