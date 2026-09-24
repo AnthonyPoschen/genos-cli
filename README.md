@@ -5,10 +5,10 @@ Customer command line for Genos game servers.
 ## Install
 
 ```bash
-go install github.com/AnthonyPoschen/genos-cli/cmd/genos@feat/customer-control-clients
+go install github.com/AnthonyPoschen/genos-cli/cmd/genos@latest
 ```
 
-Use the branch or tag you want in place of `feat/customer-control-clients`.
+Pin a commit or tag instead of `@latest` when you want a fixed build.
 
 ## Origin
 
@@ -34,7 +34,11 @@ The first match wins. A set `GENOS_TOKEN` is never written to disk.
 
 If `credentials.json` is group- or world-readable, genos refuses it until you `chmod 0600` it. `~/.config/genos/local.env` is never read.
 
-`genos auth login` starts device login, prints the user code and approval URL, and stores the token in the keyring. When no keyring is available it writes `credentials.json` and says so. `genos auth token` reads a token from stdin and stores it the same way. Do not pass the secret as a flag. `genos auth status` prints the origin, the source (`env`, `keyring`, or `file`), and the first 16 characters of the token.
+**Primary path today:** paste a personal access token (PAT) from your Genos account, then store it with `genos auth token` (reads the token from stdin; do not pass it as a flag). That writes the shared host store (keyring attribute `host`, or `credentials.json` when no keyring is available) so the Omarchy panel can reuse it.
+
+`genos auth login` (device-code flow) is implemented in this CLI but **requires an upcoming Genos API** (`POST /api/v1/auth/device/codes` and `…/tokens`). Until those routes ship on your deployment, use the PAT path.
+
+`genos auth status` prints the origin, the source (`env`, `keyring`, or `file`), and the first 16 characters of the token.
 
 ## Commands
 
