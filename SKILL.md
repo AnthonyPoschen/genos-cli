@@ -40,7 +40,9 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos mods unstage <serverID> [--expected-setup ID]` stages removal of the enabled mod.
 - `genos mods discard <serverID> [--expected-setup ID]` discards staged selection/removal.
 - `genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]` applies the staged change. Without `--expected-setup` / `--stage-id`, GETs mods and autofills `setupID` / `staged.stageID` (fails clearly if nothing staged). API errors pass through.
-- `draft-set`/`draft-apply`/`import` mods leftovers remain out of scope.
+- `genos mods draft <serverID> --provider ID [--mod-id ID ...] [--expected-setup ID]` replaces the collection draft (`PUT …/mods/draft`). Omit `--mod-id` for an empty `directModIDs` list.
+- `genos mods import <serverID> [--file path.json] [--expected-setup ID]` imports mod-list.json text (`POST …/mods/import`); `--file` or stdin.
+- `genos mods draft-apply <serverID> [--expected-setup ID] [--expected-revision N]` applies the collection draft (`POST …/mods/draft/apply`). Autofills setup id and `collection.draft.revision` from GET mods when omitted; fails clearly if no draft revision.
 - `genos saves export <serverID> [--wait] [--interval 2s] [--timeout 15m] [--output path]` starts a save export; `--wait` polls to a terminal status. Prints `downloadURL` on success; downloads bytes only with `--output`.
 - `genos saves export-status <serverID> <exportID>` prints one export JSON.
 - `genos saves import <serverID> --file path.zip […]` creates an import, PUTs the zip to `uploadURL` (no Genos bearer). Without `--wait`, stops after upload. With `--wait`, validates, polls to ready, and replaces only with `--yes` (destructive).
@@ -55,7 +57,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos profiles delete <profileID> --yes [--expected-name <name>]` deletes; requires `--yes`; autofills expectedName.
 - `genos profiles config get <profileID>` / `put [--file path]` mirror server config get/put (concurrency autofill from GET when omitted).
 - **Library prep vs live server:** use `genos profiles mods …` and `genos profiles saves …` to prep a library profile (mods + world saves on `/api/v1/profiles/{id}/…`). Use `genos mods …` / `genos saves …` for the live selected setup on a server. Attach still uses `genos select-setup <serverID> <setupID>` (PUT selected-setup); no separate attach route. On profiles, `--expected-setup` defaults from GET mods `setupID` (the profile id itself).
-- `genos profiles mods list|search|show|credentials|credentials-clear|stage|unstage|discard|apply <profileID> …` — same flags as `genos mods`.
+- `genos profiles mods list|search|show|credentials|credentials-clear|stage|unstage|discard|apply|draft|import|draft-apply <profileID> …` — same flags as `genos mods`.
 - `genos profiles saves export|export-status|import|import-status|import-validate|import-replace <profileID> …` — same flags/poll/`--wait`/`--output` behavior as `genos saves`.
 - `genos setup-copy destinations <serverID>` lists copy/transfer destinations.
 - `genos setup-copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval] [--timeout]` starts a copy (202). `--wait` polls until succeeded|failed like saves; never invent success.
@@ -63,6 +65,9 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos auth tokens` lists PAT metadata (`{"tokens":[…]}`).
 - `genos auth token-create [--name N] [--client-name C] [--machine-name M]` creates a PAT and prints `token` + **secret once on stdout**. Do not log the secret to stderr, SKILL examples, or fixtures. Prefer storing with `genos auth token` (stdin); do not auto-save.
 - `genos auth token-revoke <tokenID> --yes` revokes a PAT (204).
+- `genos public-rcon <serverID>` reveals the public RCON password once (`POST …/public-rcon/credential`). Genos will not show it again. `genos public-rcon <serverID> --rotate --yes` rotates (destructive; `--yes` required).
+- `genos server-order <serverID> [<serverID>…]` sets fleet order (`PUT /server-order`); positional order is the new order and must list every owned server exactly once.
+- `genos plan <serverID>` prints read-only plan JSON (`GET …/plan`). **Read-only:** do not invent plan-changes, reactivate, checkout, or portal follow-ups.
 - **Billing caution:** do not auto-ship spendy flows (`plan-changes`, reactivate, checkout, portal). If ever added, require explicit human confirmation.
 - `genos auth status` shows the origin, whether the token came from `env`, `keyring`, or `file`, and a token prefix only.
 - `genos auth login` and `genos auth token` are for a human. Never pass a token as an argument.

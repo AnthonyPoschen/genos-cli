@@ -55,6 +55,12 @@ func (r *runner) modsDispatch(target modsTarget, args []string) int {
 		return r.modsDiscard(target, args[1:])
 	case "apply":
 		return r.modsApply(target, args[1:])
+	case "draft":
+		return r.modsDraft(target, args[1:])
+	case "import":
+		return r.modsImport(target, args[1:])
+	case "draft-apply":
+		return r.modsDraftApply(target, args[1:])
 	case "-h", "--help", "help":
 		fmt.Fprint(r.out, usage)
 		return 0
@@ -478,6 +484,216 @@ func applyModFor(ctx context.Context, client *apiclient.Client, target modsTarge
 		return client.ApplyProfileMod(ctx, ownerID, expected, stageID)
 	}
 	return client.ApplyMod(ctx, ownerID, expected, stageID)
+}
+
+func (r *runner) modsDraft(target modsTarget, args []string) int {
+	rest, flags, modIDs, err := splitModsDraftFlags(args)
+	if errors.Is(err, errHelp) {
+		fmt.Fprint(r.out, usage)
+		return 0
+	}
+	if err != nil {
+		return r.usage(err.Error())
+	}
+	if len(rest) != 1 {
+		return r.usage(target.prefix + " draft requires a " + target.noun + " id")
+	}
+	if err := validateID(rest[0]); err != nil {
+		return r.fail(err)
+	}
+	provider, ok := flags["--provider"]
+	if !ok || strings.TrimSpace(provider) == "" {
+		return r.usage(target.prefix + " draft requires --provider")
+	}
+	if modIDs == nil {
+		modIDs = []string{}
+	}
+	client, err := r.api()
+	if err != nil {
+		return r.fail(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
+	if err != nil {
+		return r.fail(err)
+	}
+	state, err := stageModDraftFor(ctx, client, target, rest[0], expected, provider, modIDs)
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.printJSON(state)
+}
+
+func (r *runner) modsImport(target modsTarget, args []string) int {
+	rest, flags, err := splitModsFlags(args, map[string]bool{
+		"--file": true, "--expected-setup": true,
+	})
+	if errors.Is(err, errHelp) {
+		fmt.Fprint(r.out, usage)
+		return 0
+	}
+	if err != nil {
+		return r.usage(err.Error())
+	}
+	if len(rest) != 1 {
+		return r.usage(target.prefix + " import requires a " + target.noun + " id")
+	}
+	if err := validateID(rest[0]); err != nil {
+		return r.fail(err)
+	}
+	filePath := strings.TrimSpace(flags["--file"])
+	content, err := r.readPutBody(filePath)
+	if err != nil {
+		return r.fail(err)
+	}
+	if strings.TrimSpace(string(content)) == "" {
+		return r.fail(errors.New(target.prefix + " import requires mod-list.json content via --file or stdin"))
+	}
+	client, err := r.api()
+	if err != nil {
+		return r.fail(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
+	if err != nil {
+		return r.fail(err)
+	}
+	state, err := importModListFor(ctx, client, target, rest[0], expected, string(content))
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.printJSON(state)
+}
+
+func (r *runner) modsDraftApply(target modsTarget, args []string) int {
+	rest, flags, err := splitModsFlags(args, map[string]bool{
+		"--expected-setup": true, "--expected-revision": true,
+	})
+	if errors.Is(err, errHelp) {
+		fmt.Fprint(r.out, usage)
+		return 0
+	}
+	if err != nil {
+		return r.usage(err.Error())
+	}
+	if len(rest) != 1 {
+		return r.usage(target.prefix + " draft-apply requires a " + target.noun + " id")
+	}
+	if err := validateID(rest[0]); err != nil {
+		return r.fail(err)
+	}
+	client, err := r.api()
+	if err != nil {
+		return r.fail(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	expected, hasExpected := flags["--expected-setup"]
+	revisionRaw, hasRevision := flags["--expected-revision"]
+	var revision int64
+	if hasRevision {
+		parsed, err := strconv.ParseInt(revisionRaw, 10, 64)
+		if err != nil || parsed < 1 {
+			return r.usage("--expected-revision must be an integer >= 1")
+		}
+		revision = parsed
+	}
+	if !hasExpected || !hasRevision {
+		state, err := getModsFor(ctx, client, target, rest[0])
+		if err != nil {
+			return r.fail(err)
+		}
+		if !hasExpected {
+			expected = state.SetupID
+			if strings.TrimSpace(expected) == "" && target.kind == "profiles" {
+				expected = rest[0]
+			}
+		}
+		if !hasRevision {
+			rev, ok := state.DraftRevision()
+			if !ok {
+				return r.fail(errors.New("no collection.draft.revision on mods state; stage a draft first or pass --expected-revision"))
+			}
+			revision = rev
+		}
+	}
+	if strings.TrimSpace(expected) == "" {
+		if target.kind == "profiles" {
+			return r.fail(errors.New("no setupID on mods state; pass --expected-setup (profile id)"))
+		}
+		return r.fail(errors.New("no setupID on mods state; select a setup first or pass --expected-setup"))
+	}
+	if revision < 1 {
+		return r.fail(errors.New("expected revision must be >= 1"))
+	}
+	state, err := applyModDraftFor(ctx, client, target, rest[0], expected, revision)
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.printJSON(state)
+}
+
+func stageModDraftFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected, provider string, directModIDs []string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.StageProfileModDraft(ctx, ownerID, expected, provider, directModIDs)
+	}
+	return client.StageModDraft(ctx, ownerID, expected, provider, directModIDs)
+}
+
+func importModListFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected, content string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.ImportProfileModList(ctx, ownerID, expected, content)
+	}
+	return client.ImportModList(ctx, ownerID, expected, content)
+}
+
+func applyModDraftFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected string, revision int64) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.ApplyProfileModDraft(ctx, ownerID, expected, revision)
+	}
+	return client.ApplyModDraft(ctx, ownerID, expected, revision)
+}
+
+// splitModsDraftFlags parses draft flags; --mod-id may repeat.
+func splitModsDraftFlags(args []string) (rest []string, flags map[string]string, modIDs []string, err error) {
+	flags = map[string]string{}
+	valued := map[string]bool{"--provider": true, "--expected-setup": true, "--mod-id": true}
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		switch arg {
+		case "-h", "--help":
+			return nil, nil, nil, errHelp
+		case "--":
+			return append(rest, args[index+1:]...), flags, modIDs, nil
+		}
+		if arg == "--mod-id" {
+			if index+1 >= len(args) {
+				return nil, nil, nil, fmt.Errorf("%s requires a value", arg)
+			}
+			index++
+			modIDs = append(modIDs, args[index])
+			continue
+		}
+		if valued[arg] {
+			if _, exists := flags[arg]; exists {
+				return nil, nil, nil, fmt.Errorf("%s specified more than once", arg)
+			}
+			if index+1 >= len(args) {
+				return nil, nil, nil, fmt.Errorf("%s requires a value", arg)
+			}
+			index++
+			flags[arg] = args[index]
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return nil, nil, nil, fmt.Errorf("unknown flag %s", arg)
+		}
+		rest = append(rest, arg)
+	}
+	return rest, flags, modIDs, nil
 }
 
 // splitModsFlags parses known --flag value pairs. Boolean presence flags are not used.

@@ -14,7 +14,7 @@ This repository does not do Discord work.
 
 ## Remaining gaps
 
-Customer `/api/v1` routes from genos `internal/api/api.go` (admin and Stripe webhook omitted). **Covered through P1.7** are marked below.
+Customer `/api/v1` routes from genos `internal/api/api.go` (admin and Stripe webhook omitted). **Covered through P1.8** are marked below.
 
 | Route | CLI today | Notes |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ Customer `/api/v1` routes from genos `internal/api/api.go` (admin and Stripe web
 | `GET /servers/{id}/events` | — | SSE beyond console |
 | `GET …/runtime-channels`, `…/stream`, `POST …/commands` | `genos console` (interactive command only) | Stream/SSE not wrapped |
 | `GET …/runtime-sessions`, `…/channels/{id}`, `…/download` | — | History download leftover |
-| `GET …/plan` | — | Optional read-only caution slice later |
+| `GET …/plan` | `genos plan` | **P1.8** read-only; do not invent spendy follow-ups |
 | `POST …/plan-changes`, `POST …/billing/reactivate` | — | Billing money flows — agent caution |
 | `GET /profiles/games` | `genos profiles games` | **P1.6** |
 | `POST /profiles` | `genos profiles create` | **P1.6** |
@@ -43,9 +43,9 @@ Customer `/api/v1` routes from genos `internal/api/api.go` (admin and Stripe web
 | `…/profiles/{id}/mods…` | `genos profiles mods …` | **P1.7** |
 | `GET/POST/PATCH/DELETE …/setups…`, `PUT/DELETE …/selected-setup` | `genos setups`, `create-setup`, `rename-setup`, `delete-setup`, `select-setup`, `unload-setup` | Covered; attach = select-setup |
 | `GET/PUT …/configuration` | `genos config get/put` | Covered |
-| `POST …/public-rcon/credential` | — | public-rcon leftover |
-| `…/servers/{id}/mods…` | `genos mods …` | Core covered; draft/import leftovers |
-| `PUT …/mods/draft`, `POST …/mods/import`, `POST …/mods/draft/apply` | — | Mods draft/import leftovers |
+| `POST …/public-rcon/credential` | `genos public-rcon` | **P1.8** password once; `--rotate` needs `--yes` |
+| `…/servers/{id}/mods…` | `genos mods …` | Core + **P1.8** draft/import/draft-apply |
+| `PUT …/mods/draft`, `POST …/mods/import`, `POST …/mods/draft/apply` | `genos mods draft|import|draft-apply` (+ `profiles mods …`) | **P1.8** |
 | `POST …/actions` | `genos start/stop/force-stop/restart` | Covered |
 | `GET/POST …/broadcast` | `genos broadcast-status`, `genos broadcast` | Covered (P1.5) |
 | `POST/GET …/save-exports`, `…/save-imports…` | `genos saves …` | Server side covered |
@@ -53,14 +53,13 @@ Customer `/api/v1` routes from genos `internal/api/api.go` (admin and Stripe web
 | `GET …/setup-copy-destinations` | `genos setup-copy destinations` | **P1.6** |
 | `POST …/setups/{setupID}/copies` | `genos setup-copy start` | **P1.6** |
 | `GET …/setup-copies/{copyID}` | `genos setup-copy status` | **P1.6** |
-| `PUT /server-order` | — | Fleet order leftover |
+| `PUT /server-order` | `genos server-order` | **P1.8** |
 | `GET …/files`, `POST …/files/archive-transfer` | — | Unreleased capability |
 | `POST /billing/checkout-sessions`, `POST /billing/portal-sessions` | — | Billing money flows — agent caution |
 
 ### Explicit follow-ups
 
-1. **Billing money flows** — `plan-changes`, `billing/reactivate`, checkout/portal sessions. Do **not** auto-ship spendy flows; if ever added, require explicit human confirmation and clear agent caution labels.
-2. **Optional read-only `GET …/plan`** — future caution-labeled slice (no mutations).
-3. **Leftovers** — `public-rcon/credential`, SSE/events beyond console, runtime-sessions download, managed files (unreleased), fleet `PUT /server-order`, mods draft/import leftovers.
-4. **Device auth** — still blocked on prod until genos #216.
-5. Out of scope here: Omarchy, CatalogStatus/sales, Factorio/PZ private product, #212/#64, private genos/controller PRs.
+1. **Billing money flows** — `plan-changes`, `billing/reactivate`, checkout/portal sessions. Do **not** auto-ship spendy flows; if ever added, require explicit human confirmation and clear agent caution labels. `genos plan` is read-only only.
+2. **Device auth** — still blocked on prod until genos #216.
+3. **Deferred leftovers** — SSE/events beyond console, runtime-sessions download, managed files (unreleased).
+4. Out of scope here: Omarchy, CatalogStatus/sales, Factorio/PZ private product, #212/#64, private genos/controller PRs.

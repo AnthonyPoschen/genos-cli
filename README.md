@@ -72,6 +72,12 @@ genos mods stage <serverID> <providerModID> --provider ID [--expected-setup ID]
 genos mods unstage <serverID> [--expected-setup ID]
 genos mods discard <serverID> [--expected-setup ID]
 genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]
+genos mods draft <serverID> --provider ID [--mod-id ID ...] [--expected-setup ID]
+genos mods import <serverID> [--file path.json] [--expected-setup ID]
+genos mods draft-apply <serverID> [--expected-setup ID] [--expected-revision N]
+genos public-rcon <serverID> [--rotate --yes]
+genos server-order <serverID> [<serverID>...]
+genos plan <serverID>
 genos saves export <serverID> [--wait] [--interval 2s] [--timeout 15m] [--output path]
 genos saves export-status <serverID> <exportID>
 genos saves import <serverID> --file path.zip [--media-type application/zip] [--wait] [--interval 2s] [--timeout 30m] [--apply-save-mods|--no-apply-save-mods] [--yes]
@@ -128,12 +134,18 @@ Server mod routes under `/api/v1/servers/{serverID}/mods`. Library prep uses the
 | `genos mods unstage <serverID> [--expected-setup ID]` | `POST …/mods/staged-removal` `{expectedSetupID}` (stages removal of the enabled mod) |
 | `genos mods discard <serverID> [--expected-setup ID]` | `POST …/mods/discard` `{expectedSetupID}` (discards staged selection/removal) |
 | `genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]` | `POST …/mods/apply` `{expectedSetupID,stageID}` |
+| `genos mods draft <serverID> --provider ID [--mod-id ID …] [--expected-setup ID]` | `PUT …/mods/draft` `{expectedSetupID,providerID,directModIDs}` |
+| `genos mods import <serverID> [--file path.json] [--expected-setup ID]` | `POST …/mods/import` `{expectedSetupID,content}` |
+| `genos mods draft-apply <serverID> [--expected-setup ID] [--expected-revision N]` | `POST …/mods/draft/apply` `{expectedSetupID,expectedRevision}` |
+| `genos public-rcon <serverID> [--rotate --yes]` | `POST …/public-rcon/credential` `{rotate}` — password shown once |
+| `genos server-order <serverID> [<serverID>…]` | `PUT /server-order` `{serverIDs}` |
+| `genos plan <serverID>` | `GET …/plan` → prints `plan` object (**read-only**) |
 
 **Autofill (P1.1/P1.2 style):** when `--expected-setup` is omitted, genos GETs mods and uses `setupID`. When `mods apply` omits `--stage-id`, genos GETs mods and uses `staged.stageID` (fails clearly if nothing is staged). `--provider` is **required** for `stage` (agents know the game provider). Examples: `factorio-mod-portal`, `steam-workshop` (and other provider IDs returned by catalog/list state).
 
 List and mutating commands print the `mods` JSON object (pretty), same spirit as `config get`. Search/show print catalog JSON as returned. API errors (`server_not_confirmed_stopped`, `mod_provider_credentials_required`, `selected_setup_changed`, etc.) are surfaced as-is — never invent success. No `Idempotency-Key` (matches the dashboard).
 
-**Deferred follow-ups:** `mods draft-set` → `PUT …/mods/draft`, `mods draft-apply` → `POST …/mods/draft/apply`, `mods import` → `POST …/mods/import`.
+**P1.8 leftovers:** `mods draft` / `import` / `draft-apply` (and `profiles mods …` mirrors), `public-rcon`, `server-order`, and read-only `plan` are implemented. Billing money flows remain out of scope.
 
 ## Saves (server path)
 
@@ -158,7 +170,7 @@ Prep a library profile the same way you prep a live server, then attach with `ge
 
 | CLI | HTTP |
 | --- | --- |
-| `genos profiles mods … <profileID> …` | `/api/v1/profiles/{profileID}/mods…` (same subcommands/flags as `genos mods`) |
+| `genos profiles mods … <profileID> …` | `/api/v1/profiles/{profileID}/mods…` (same subcommands/flags as `genos mods`, including draft/import/draft-apply) |
 | `genos profiles saves … <profileID> …` | `/api/v1/profiles/{profileID}/save-exports` / `save-imports…` (same flags/poll/`--wait`/`--output` as `genos saves`) |
 
 On profiles, `--expected-setup` autofills from GET mods `setupID` (the profile id). Live-server targeting stays `genos mods|saves …`.
