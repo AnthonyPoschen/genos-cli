@@ -26,6 +26,9 @@ Usage:
   genos force-stop <serverID> [--yes]
   genos restart <serverID> [--yes]
   genos console <serverID> <text...>
+  genos setups <serverID>
+  genos select-setup <serverID> <setupID> [--expected <id>]
+  genos unload-setup <serverID> [--expected <id>]
   genos auth login
   genos auth token
   genos auth status
@@ -41,6 +44,11 @@ never written to disk. ~/.config/genos/local.env is not read.
 --yes skips a required confirmation. force-stop still tells the API that
 unsaved progress may be lost. Without a TTY, a required prompt exits
 without sending the action.
+
+select-setup and unload-setup send expectedSelectedSetupID for compare-
+and-swap. When --expected is omitted, genos GETs setups first and uses
+selectedSetupID (empty string if none). When --expected is passed, its
+value is sent as-is (--expected requires a following value).
 `
 
 // Options configures process dependencies. Zero values use the real process.
@@ -88,6 +96,12 @@ func Run(args []string, opts Options) int {
 		return runner.action(args[0], args[1:])
 	case "console":
 		return runner.console(args[1:])
+	case "setups":
+		return runner.setups(args[1:])
+	case "select-setup":
+		return runner.selectSetup(args[1:])
+	case "unload-setup":
+		return runner.unloadSetup(args[1:])
 	case "auth":
 		return runner.auth(args[1:])
 	default:

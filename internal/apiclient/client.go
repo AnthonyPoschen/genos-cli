@@ -62,13 +62,16 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	if e.Message != "" {
+	switch {
+	case e.Code != "" && e.Message != "":
+		return e.Code + ": " + e.Message
+	case e.Message != "":
 		return e.Message
-	}
-	if e.Code != "" {
+	case e.Code != "":
 		return e.Code
+	default:
+		return fmt.Sprintf("request failed with status %d", e.Status)
 	}
-	return fmt.Sprintf("request failed with status %d", e.Status)
 }
 
 // ListServers calls GET /api/v1/servers.
@@ -491,4 +494,89 @@ func newUUID() (string, error) {
 	raw[6] = (raw[6] & 0x0f) | 0x40
 	raw[8] = (raw[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", raw[0:4], raw[4:6], raw[6:8], raw[8:10], raw[10:16]), nil
+}
+
+// SavedSetup is one profile in a SetupChooser.
+type SavedSetup struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Game Game   `json:"game"`
+}
+
+// SavedSetupCapacity is the profile library capacity summary.
+type SavedSetupCapacity struct {
+	Used  int `json:"used"`
+	Limit int `json:"limit"`
+}
+
+// SetupGame is a game that can still create a profile.
+type SetupGame struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Summary string `json:"summary"`
+}
+
+// SetupChooser is GET /api/v1/servers/{id}/setups.
+type SetupChooser struct {
+	Setups          []SavedSetup       `json:"setups"`
+	SelectedSetupID string             `json:"selectedSetupID"`
+	Capacity        SavedSetupCapacity `json:"capacity"`
+	CreatableGames  []SetupGame        `json:"creatableGames"`
+}
+
+// ListSetups calls GET /api/v1/servers/{id}/setups.
+func (c *Client) ListSetups(ctx context.Context, serverID string) (SetupChooser, error) {
+	data, status, err := c.do(ctx, http.MethodGet, "/api/v1/servers/"+url.PathEscape(serverID)+"/setups", nil, false)
+	if err != nil {
+		return SetupChooser{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupChooser{}, apiError(status, data)
+	}
+	var chooser SetupChooser
+	if err := json.Unmarshal(data, &chooser); err != nil {
+		return SetupChooser{}, fmt.Errorf("setups response: %w", err)
+	}
+	if chooser.Setups == nil {
+		chooser.Setups = []SavedSetup{}
+	}
+	return chooser, nil
+}
+
+// SelectSetup calls PUT /api/v1/servers/{id}/selected-setup.
+// Idempotency-Key is not sent (matches Omarchy / dashboard).
+func (c *Client) SelectSetup(ctx context.Context, serverID, setupID, expectedSelectedSetupID string) error {
+	body := struct {
+		SetupID                 string `json:"setupID"`
+		ExpectedSelectedSetupID string `json:"expectedSelectedSetupID"`
+	}{
+		SetupID:                 setupID,
+		ExpectedSelectedSetupID: expectedSelectedSetupID,
+	}
+	data, status, err := c.do(ctx, http.MethodPut, "/api/v1/servers/"+url.PathEscape(serverID)+"/selected-setup", body, false)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return apiError(status, data)
+	}
+	return nil
+}
+
+// UnloadSetup calls DELETE /api/v1/servers/{id}/selected-setup.
+// Idempotency-Key is not sent (matches Omarchy / dashboard).
+func (c *Client) UnloadSetup(ctx context.Context, serverID, expectedSelectedSetupID string) error {
+	body := struct {
+		ExpectedSelectedSetupID string `json:"expectedSelectedSetupID"`
+	}{
+		ExpectedSelectedSetupID: expectedSelectedSetupID,
+	}
+	data, status, err := c.do(ctx, http.MethodDelete, "/api/v1/servers/"+url.PathEscape(serverID)+"/selected-setup", body, false)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return apiError(status, data)
+	}
+	return nil
 }

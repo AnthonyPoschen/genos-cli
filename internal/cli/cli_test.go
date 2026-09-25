@@ -598,3 +598,222 @@ func writeTokenFile(t *testing.T, path, host, token string, mode os.FileMode) {
 		t.Fatal(err)
 	}
 }
+
+func TestSetupsList(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/servers/srv-1/setups" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}},{"id":"setup-b","name":"Alt","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a","capacity":{"used":2,"limit":5},"creatableGames":[]}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"setups", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	want := "setup-a\tMain\tFactorio\t*\nsetup-b\tAlt\tFactorio\t\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout %q want %q", stdout.String(), want)
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Auth != "Bearer "+testToken || hits[0].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestSelectSetupDefaultsExpectedFromChooser(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}},{"id":"setup-b","name":"Alt","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/selected-setup":
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","selectedSetupID":"setup-b","selectedSetupName":"Alt"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"select-setup", "srv-1", "setup-b"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if stdout.String() != "selected setup-b for srv-1\n" {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 {
+		t.Fatalf("hits %+v", hits)
+	}
+	if hits[0].Method != http.MethodGet || hits[0].Path != "/api/v1/servers/srv-1/setups" {
+		t.Fatalf("first hit %+v", hits[0])
+	}
+	put := hits[1]
+	if put.Method != http.MethodPut || put.Path != "/api/v1/servers/srv-1/selected-setup" {
+		t.Fatalf("put %+v", put)
+	}
+	if put.Key != "" {
+		t.Fatalf("unexpected idempotency key %q", put.Key)
+	}
+	if put.Auth != "Bearer "+testToken {
+		t.Fatalf("auth %q", put.Auth)
+	}
+	var body map[string]string
+	if err := json.Unmarshal([]byte(put.Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["setupID"] != "setup-b" || body["expectedSelectedSetupID"] != "setup-a" {
+		t.Fatalf("body %#v", body)
+	}
+}
+
+func TestSelectSetupExplicitExpectedSkipsChooserGET(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/selected-setup" {
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","selectedSetupID":"setup-b"}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"select-setup", "srv-1", "setup-b", "--expected", "setup-a"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "selected setup-b") {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Method != http.MethodPut {
+		t.Fatalf("hits %+v", hits)
+	}
+	var body map[string]string
+	if err := json.Unmarshal([]byte(hits[0].Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["expectedSelectedSetupID"] != "setup-a" {
+		t.Fatalf("body %#v", body)
+	}
+}
+
+func TestSelectSetupRunningSurfacesAPIError(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/selected-setup":
+			w.WriteHeader(http.StatusConflict)
+			_, _ = io.WriteString(w, `{"error":{"code":"server_not_confirmed_stopped","message":"the Server must be confirmed stopped before changing Profiles"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"select-setup", "srv-1", "setup-b"}, opts); code == 0 {
+		t.Fatal("expected failure while Running")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	errText := stderr.String()
+	if !strings.Contains(errText, "server_not_confirmed_stopped") {
+		t.Fatalf("stderr %q missing server_not_confirmed_stopped", errText)
+	}
+	hits := rec.snapshot()
+	var putCount int
+	for _, item := range hits {
+		if item.Method == http.MethodPut {
+			putCount++
+		}
+	}
+	if putCount != 1 {
+		t.Fatalf("expected one PUT, hits %+v", hits)
+	}
+}
+
+func TestUnloadSetupDefaultsExpected(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/servers/srv-1/selected-setup":
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","selectedSetupID":""}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"unload-setup", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if stdout.String() != "unloaded setup for srv-1\n" {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 || hits[1].Method != http.MethodDelete || hits[1].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	var body map[string]string
+	if err := json.Unmarshal([]byte(hits[1].Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["expectedSelectedSetupID"] != "setup-a" {
+		t.Fatalf("body %#v", body)
+	}
+}
+
+func TestUnloadSetupEmptySelectedDefaultsEmptyExpected(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/setups"):
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}}]}`)
+		case r.Method == http.MethodDelete:
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"unload-setup", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var body map[string]string
+	if err := json.Unmarshal([]byte(hits[1].Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["expectedSelectedSetupID"] != "" {
+		t.Fatalf("body %#v", body)
+	}
+}
+
+func TestExpectedFlagRequiresValue(t *testing.T) {
+	opts, _, stderr := testOptions(t.TempDir(), "https://genosservers.com", testToken, nil)
+	if code := Run([]string{"select-setup", "srv-1", "setup-b", "--expected"}, opts); code != 2 {
+		t.Fatalf("exit %d stderr %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--expected requires a value") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}

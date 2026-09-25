@@ -1,6 +1,10 @@
 package apiclient
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -59,5 +63,62 @@ func TestDecodeServerShapes(t *testing.T) {
 	}
 	if server.Metrics == nil || server.Metrics.PlayerCount == nil || *server.Metrics.PlayerCount != 2 {
 		t.Fatalf("metrics = %+v", server.Metrics)
+	}
+}
+
+func TestAPIErrorSurfacesCode(t *testing.T) {
+	err := &APIError{Status: 409, Code: "server_not_confirmed_stopped", Message: "the Server must be confirmed stopped before changing Profiles"}
+	got := err.Error()
+	if !strings.Contains(got, "server_not_confirmed_stopped") || !strings.Contains(got, "confirmed stopped") {
+		t.Fatalf("Error() = %q", got)
+	}
+}
+
+func TestListSelectUnloadSetupsHTTP(t *testing.T) {
+	var gotMethod, gotPath, gotAuth, gotKey, gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAuth, gotKey, gotBody = r.Header.Get("Authorization"), r.Header.Get("Idempotency-Key"), string(payload)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a","capacity":{"used":1,"limit":5},"creatableGames":[{"id":"factorio","name":"Factorio"}]}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/selected-setup":
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","selectedSetupID":"setup-b"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/servers/srv-1/selected-setup":
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "tok")
+	ctx := context.Background()
+
+	chooser, err := client.ListSetups(ctx, "srv-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chooser.SelectedSetupID != "setup-a" || len(chooser.Setups) != 1 || chooser.Setups[0].Name != "Main" {
+		t.Fatalf("chooser %+v", chooser)
+	}
+	if gotMethod != http.MethodGet || gotAuth != "Bearer tok" || gotKey != "" {
+		t.Fatalf("list meta %s %s key=%q", gotMethod, gotAuth, gotKey)
+	}
+
+	if err := client.SelectSetup(ctx, "srv-1", "setup-b", "setup-a"); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPut || gotKey != "" || !strings.Contains(gotBody, `"setupID":"setup-b"`) || !strings.Contains(gotBody, `"expectedSelectedSetupID":"setup-a"`) {
+		t.Fatalf("select %s key=%q body=%s", gotMethod, gotKey, gotBody)
+	}
+
+	if err := client.UnloadSetup(ctx, "srv-1", "setup-b"); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/v1/servers/srv-1/selected-setup" || gotKey != "" || !strings.Contains(gotBody, `"expectedSelectedSetupID":"setup-b"`) {
+		t.Fatalf("unload %s %s key=%q body=%s", gotMethod, gotPath, gotKey, gotBody)
 	}
 }
