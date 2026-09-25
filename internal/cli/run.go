@@ -33,6 +33,15 @@ Usage:
   genos config put <serverID> [--file path]
   genos schema <gameID>
   genos management-schema <gameID>
+  genos mods list <serverID>
+  genos mods search <serverID> [--query q] [--category c] [--sort s] [--page n] [--page-size n]
+  genos mods show <serverID> <providerModID>
+  genos mods credentials <serverID> --username U --token T [--expected-setup ID]
+  genos mods credentials-clear <serverID> [--expected-setup ID]
+  genos mods stage <serverID> <providerModID> --provider ID [--expected-setup ID]
+  genos mods unstage <serverID> [--expected-setup ID]
+  genos mods discard <serverID> [--expected-setup ID]
+  genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]
   genos auth login
   genos auth token
   genos auth status
@@ -61,6 +70,17 @@ concurrency fields is omitted, genos GETs configuration first and fills
 the missing fields (setupID, updatedAt, version). A body that is not a
 JSON object or lacks values fails before any write. API errors such as
 server_not_confirmed_stopped are surfaced as-is.
+
+mods list and mutating mods commands print the mods JSON object (pretty),
+same spirit as config get. mods search / show print catalog JSON as
+returned. Mutating commands send expectedSetupID for compare-and-swap.
+When --expected-setup is omitted, genos GETs mods first and uses setupID.
+mods apply also autofills stageID from staged.stageID when --stage-id is
+omitted (fails clearly if nothing is staged). mods stage requires
+--provider (examples: factorio-mod-portal, steam-workshop). API errors
+such as server_not_confirmed_stopped and mod_provider_credentials_required
+are surfaced as-is. Profile /api/v1/profiles/.../mods mirrors, draft-set,
+draft-apply, and import are out of scope for this release.
 `
 
 // Options configures process dependencies. Zero values use the real process.
@@ -118,6 +138,8 @@ func Run(args []string, opts Options) int {
 		return runner.config(args[1:])
 	case "schema", "management-schema":
 		return runner.schema(args[1:])
+	case "mods":
+		return runner.mods(args[1:])
 	case "auth":
 		return runner.auth(args[1:])
 	default:

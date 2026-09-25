@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -659,4 +660,253 @@ func (c *Client) GetManagementSchema(ctx context.Context, gameID string) (json.R
 		return nil, errors.New("management schema response is not valid JSON")
 	}
 	return json.RawMessage(data), nil
+}
+
+// SetupModState is the selected setup mod projection for a server.
+type SetupModState struct {
+	SetupID               string          `json:"setupID"`
+	GameID                string          `json:"gameID"`
+	Editable              bool            `json:"editable"`
+	ReadOnlyReason        string          `json:"readOnlyReason,omitempty"`
+	CredentialsConfigured bool            `json:"credentialsConfigured"`
+	Staged                *SetupMod       `json:"staged,omitempty"`
+	Enabled               *SetupMod       `json:"enabled,omitempty"`
+	Installed             json.RawMessage `json:"installed,omitempty"`
+	Available             json.RawMessage `json:"available,omitempty"`
+	Update                json.RawMessage `json:"update,omitempty"`
+	Issues                json.RawMessage `json:"issues,omitempty"`
+	Collection            json.RawMessage `json:"collection,omitempty"`
+}
+
+// SetupMod is one staged or enabled mod entry.
+type SetupMod struct {
+	Operation     string    `json:"operation,omitempty"`
+	ProviderID    string    `json:"providerID"`
+	ProviderModID string    `json:"providerModID"`
+	Name          string    `json:"name,omitempty"`
+	Title         string    `json:"title,omitempty"`
+	Version       string    `json:"version,omitempty"`
+	GameVersion   string    `json:"gameVersion,omitempty"`
+	Dependencies  []string  `json:"dependencies,omitempty"`
+	LoadIDs       []string  `json:"loadIDs,omitempty"`
+	StageID       string    `json:"stageID,omitempty"`
+	StagedAt      time.Time `json:"stagedAt,omitempty"`
+	AppliedAt     time.Time `json:"appliedAt,omitempty"`
+}
+
+// ModCatalogQuery is GET /api/v1/servers/{id}/mods/catalog.
+type ModCatalogQuery struct {
+	Query    string
+	Category string
+	Sort     string
+	Page     int
+	PageSize int
+}
+
+func modsPath(serverID, suffix string) string {
+	base := "/api/v1/servers/" + url.PathEscape(serverID) + "/mods"
+	if suffix == "" {
+		return base
+	}
+	return base + suffix
+}
+
+func decodeModsPayload(data []byte) (SetupModState, error) {
+	var payload struct {
+		Mods SetupModState `json:"mods"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return SetupModState{}, fmt.Errorf("mods response: %w", err)
+	}
+	return payload.Mods, nil
+}
+
+// GetMods calls GET /api/v1/servers/{id}/mods.
+// Idempotency-Key is not sent (matches dashboard).
+func (c *Client) GetMods(ctx context.Context, serverID string) (SetupModState, error) {
+	data, status, err := c.do(ctx, http.MethodGet, modsPath(serverID, ""), nil, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// SearchModCatalog calls GET /api/v1/servers/{id}/mods/catalog.
+// Returns the inner catalog JSON object as returned by the API.
+func (c *Client) SearchModCatalog(ctx context.Context, serverID string, query ModCatalogQuery) (json.RawMessage, error) {
+	values := url.Values{}
+	if query.Query != "" {
+		values.Set("q", query.Query)
+	}
+	if query.Category != "" {
+		values.Set("category", query.Category)
+	}
+	if query.Sort != "" {
+		values.Set("sort", query.Sort)
+	}
+	if query.Page > 0 {
+		values.Set("page", strconv.Itoa(query.Page))
+	}
+	if query.PageSize > 0 {
+		values.Set("pageSize", strconv.Itoa(query.PageSize))
+	}
+	path := modsPath(serverID, "/catalog")
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	data, status, err := c.do(ctx, http.MethodGet, path, nil, false)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, apiError(status, data)
+	}
+	var payload struct {
+		Catalog json.RawMessage `json:"catalog"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, fmt.Errorf("mod catalog response: %w", err)
+	}
+	if len(payload.Catalog) == 0 || string(payload.Catalog) == "null" {
+		return nil, errors.New("mod catalog response missing catalog")
+	}
+	return payload.Catalog, nil
+}
+
+// InspectModCatalog calls GET /api/v1/servers/{id}/mods/catalog/{modID}.
+// Returns the inner mod JSON object as returned by the API.
+func (c *Client) InspectModCatalog(ctx context.Context, serverID, providerModID string) (json.RawMessage, error) {
+	data, status, err := c.do(ctx, http.MethodGet, modsPath(serverID, "/catalog/"+url.PathEscape(providerModID)), nil, false)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, apiError(status, data)
+	}
+	var payload struct {
+		Mod json.RawMessage `json:"mod"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, fmt.Errorf("mod catalog detail response: %w", err)
+	}
+	if len(payload.Mod) == 0 || string(payload.Mod) == "null" {
+		return nil, errors.New("mod catalog detail response missing mod")
+	}
+	return payload.Mod, nil
+}
+
+// SetModCredentials calls PUT /api/v1/servers/{id}/mods/credentials.
+func (c *Client) SetModCredentials(ctx context.Context, serverID, expectedSetupID, username, token string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+		Username        string `json:"username"`
+		Token           string `json:"token"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+		Username:        username,
+		Token:           token,
+	}
+	data, status, err := c.do(ctx, http.MethodPut, modsPath(serverID, "/credentials"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// ClearModCredentials calls DELETE /api/v1/servers/{id}/mods/credentials.
+func (c *Client) ClearModCredentials(ctx context.Context, serverID, expectedSetupID string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+	}
+	data, status, err := c.do(ctx, http.MethodDelete, modsPath(serverID, "/credentials"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// StageMod calls PUT /api/v1/servers/{id}/mods/staged-selection.
+func (c *Client) StageMod(ctx context.Context, serverID, expectedSetupID, providerID, providerModID string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+		ProviderID      string `json:"providerID"`
+		ProviderModID   string `json:"providerModID"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+		ProviderID:      providerID,
+		ProviderModID:   providerModID,
+	}
+	data, status, err := c.do(ctx, http.MethodPut, modsPath(serverID, "/staged-selection"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// UnstageMod calls POST /api/v1/servers/{id}/mods/staged-removal.
+// This stages removal of the currently enabled mod (not discard of a staged selection).
+func (c *Client) UnstageMod(ctx context.Context, serverID, expectedSetupID string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+	}
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(serverID, "/staged-removal"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// DiscardMod calls POST /api/v1/servers/{id}/mods/discard.
+func (c *Client) DiscardMod(ctx context.Context, serverID, expectedSetupID string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+	}
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(serverID, "/discard"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// ApplyMod calls POST /api/v1/servers/{id}/mods/apply.
+func (c *Client) ApplyMod(ctx context.Context, serverID, expectedSetupID, stageID string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+		StageID         string `json:"stageID"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+		StageID:         stageID,
+	}
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(serverID, "/apply"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
 }
