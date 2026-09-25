@@ -18,9 +18,16 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos force-stop <serverID>` warns that unsaved progress will be lost unless `--yes`.
 - `genos restart <serverID>` asks when players are online or notable updates are pending, unless `--yes`.
 - `genos console <serverID> <text...>` sends one console command and prints the response.
-- `genos setups <serverID>` lists profiles (`id`, `name`, `game`) and marks the selected one with `*`.
+- `genos setups <serverID>` lists profiles (`id`, `name`, `game`) and marks the selected one with `*`; also prints `creatable\t<gameID>\t<name>` lines from `creatableGames`.
 - `genos select-setup <serverID> <setupID> [--expected <id>]` selects a profile. Without `--expected`, GETs setups and uses `selectedSetupID`.
 - `genos unload-setup <serverID> [--expected <id>]` unloads the selected profile (same `--expected` default).
+- `genos create-setup <serverID> --game <gameID>` creates a profile (JSON). Game ids come from `genos setups` creatable lines.
+- `genos rename-setup <serverID> <setupID> <name> [--expected-name <name>] [--expected <id>]` renames a profile (JSON). Autofills expected* from GET setups when omitted.
+- `genos delete-setup <serverID> <setupID> --yes [--expected-name <name>] [--expected <id>]` deletes a profile (JSON). Requires `--yes`.
+- `genos rename <serverID> <name>` renames a server (JSON). API must confirm Stopped; never invent success.
+- `genos broadcast <serverID> [--message <text>]` POSTs an in-game notice (JSON).
+- `genos broadcast-status <serverID> [--message <text>]` GETs broadcast availability/preview (JSON).
+- Managed `files` / `files/archive-transfer` are **not released** (`capability_not_released`). Do not invent a files command; use `genos saves …` for saves.
 - `genos config get <serverID>` prints selected setup configuration JSON.
 - `genos config put <serverID> [--file path]` PUTs configuration. Preferred: full body with `expectedSetupID`, `expectedUpdatedAt`, `version`, `values` (+ optional `secrets`) on stdin/`--file`. If concurrency fields are omitted but `values` is present, GETs configuration first and fills them. API errors (e.g. `server_not_confirmed_stopped`) are surfaced as-is.
 - `genos schema <gameID>` (alias `management-schema`) prints the public management-schema JSON.

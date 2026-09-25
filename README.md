@@ -53,6 +53,12 @@ genos console <serverID> <text...>
 genos setups <serverID>
 genos select-setup <serverID> <setupID> [--expected <id>]
 genos unload-setup <serverID> [--expected <id>]
+genos create-setup <serverID> --game <gameID>
+genos rename-setup <serverID> <setupID> <name> [--expected-name <name>] [--expected <id>]
+genos delete-setup <serverID> <setupID> --yes [--expected-name <name>] [--expected <id>]
+genos rename <serverID> <name>
+genos broadcast <serverID> [--message <text>]
+genos broadcast-status <serverID> [--message <text>]
 genos config get <serverID>
 genos config put <serverID> [--file path]
 genos schema <gameID>
@@ -84,6 +90,17 @@ genos auth status
 `console` sends the text to the first runtime channel whose interaction is `interactive`, and prints the response.
 
 `setups` lists each profile for a server as `id`, `name`, `game`, and marks the selected one with `*`.
+
+`create-setup` creates a profile on a server (`POST /api/v1/servers/{id}/setups` with `gameID`). Use game ids from the `creatable` lines printed by `genos setups` (API `creatableGames`).
+
+`rename-setup` / `delete-setup` mutate a profile (`PATCH` / `DELETE …/setups/{setupID}`) with compare-and-swap fields `expectedName` and `expectedSelectedSetupID`. When `--expected-name` / `--expected` are omitted, genos GETs setups first and uses that setup's `name` plus the chooser's `selectedSetupID`. `delete-setup` requires `--yes` (destructive). Responses are pretty-printed JSON.
+
+`rename` renames a server (`PATCH /api/v1/servers/{id}` with `{"name":…}`). The API requires confirmed Stopped; errors such as `server_not_confirmed_stopped`, `invalid_server_name`, and `server_name_conflict` pass through. Prints the server JSON.
+
+`broadcast` sends an in-game notice (`POST …/broadcast`). `broadcast-status` previews availability (`GET …/broadcast`, optional `?message=`). Both print JSON; rate-limit / availability errors pass through. No Idempotency-Key.
+
+**Files not released:** `GET /api/v1/servers/{id}/files` and `POST …/files/archive-transfer` return `404 capability_not_released`. This CLI does **not** ship a `files` command. Save workflows use `genos saves …` (P1.4).
+
 
 `select-setup` and `unload-setup` change the selected profile (PUT/DELETE `/api/v1/servers/{id}/selected-setup`). They require the server to be confirmed Stopped on the API; a Running server surfaces the API error `server_not_confirmed_stopped` (no client-side fake success). Both send `expectedSelectedSetupID` for compare-and-swap. When `--expected` is omitted, genos GETs `/api/v1/servers/{id}/setups` first and uses that response's `selectedSetupID` (empty string if none). When `--expected` is passed, its value is sent as-is; the flag requires a following value.
 
