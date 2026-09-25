@@ -24,6 +24,16 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos config get <serverID>` prints selected setup configuration JSON.
 - `genos config put <serverID> [--file path]` PUTs configuration. Preferred: full body with `expectedSetupID`, `expectedUpdatedAt`, `version`, `values` (+ optional `secrets`) on stdin/`--file`. If concurrency fields are omitted but `values` is present, GETs configuration first and fills them. API errors (e.g. `server_not_confirmed_stopped`) are surfaced as-is.
 - `genos schema <gameID>` (alias `management-schema`) prints the public management-schema JSON.
+- `genos mods list <serverID>` prints selected-setup mods JSON (`GET /api/v1/servers/{id}/mods`).
+- `genos mods search <serverID> [--query q] [--category c] [--sort s] [--page n] [--page-size n]` prints catalog JSON.
+- `genos mods show <serverID> <providerModID>` prints one catalog mod JSON.
+- `genos mods credentials <serverID> --username U --token T [--expected-setup ID]` stores provider credentials.
+- `genos mods credentials-clear <serverID> [--expected-setup ID]` clears provider credentials.
+- `genos mods stage <serverID> <providerModID> --provider ID [--expected-setup ID]` stages a catalog mod (`--provider` required; e.g. `factorio-mod-portal`, `steam-workshop`).
+- `genos mods unstage <serverID> [--expected-setup ID]` stages removal of the enabled mod.
+- `genos mods discard <serverID> [--expected-setup ID]` discards staged selection/removal.
+- `genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]` applies the staged change. Without `--expected-setup` / `--stage-id`, GETs mods and autofills `setupID` / `staged.stageID` (fails clearly if nothing staged). API errors pass through.
+- Profile `/api/v1/profiles/.../mods` mirrors, `draft-set`/`draft-apply`, and `import` are out of scope here.
 - `genos auth status` shows the origin, whether the token came from `env`, `keyring`, or `file`, and a token prefix only.
 - `genos auth login` and `genos auth token` are for a human. Never pass a token as an argument.
 

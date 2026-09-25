@@ -209,3 +209,142 @@ func TestPutConfigurationSurfacesAPIError(t *testing.T) {
 		t.Fatalf("err %#v", err)
 	}
 }
+
+func TestModsHTTP(t *testing.T) {
+	var gotMethod, gotPath, gotQuery, gotAuth, gotKey, gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
+		gotAuth, gotKey, gotBody = r.Header.Get("Authorization"), r.Header.Get("Idempotency-Key"), string(payload)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":true,"staged":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","name":"tiny-mod","stageID":"stage-sha"}}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods/catalog":
+			_, _ = io.WriteString(w, `{"catalog":{"query":"tiny","page":1,"pageSize":10,"results":[{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","name":"tiny-mod","title":"Tiny Mod"}]}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods/catalog/tiny-mod":
+			_, _ = io.WriteString(w, `{"mod":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","name":"tiny-mod","title":"Tiny Mod","latestVersion":"1.2.3"}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/mods/credentials":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":true}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/servers/srv-1/mods/credentials":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":false}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/mods/staged-selection":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":true,"staged":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","stageID":"stage-sha"}}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/staged-removal":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"staged":{"operation":"remove","stageID":"stage-remove"}}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/discard":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/apply":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"enabled":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "tok")
+	ctx := context.Background()
+
+	state, err := client.GetMods(ctx, "srv-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.SetupID != "setup-a" || state.Staged == nil || state.Staged.StageID != "stage-sha" {
+		t.Fatalf("state %+v", state)
+	}
+	if gotMethod != http.MethodGet || gotAuth != "Bearer tok" || gotKey != "" {
+		t.Fatalf("get meta %s %s key=%q", gotMethod, gotAuth, gotKey)
+	}
+
+	catalog, err := client.SearchModCatalog(ctx, "srv-1", ModCatalogQuery{Query: "tiny", Category: "logistics", Sort: "updated", Page: 2, PageSize: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(catalog), `"providerModID":"tiny-mod"`) {
+		t.Fatalf("catalog %s", catalog)
+	}
+	if gotPath != "/api/v1/servers/srv-1/mods/catalog" || !strings.Contains(gotQuery, "q=tiny") || !strings.Contains(gotQuery, "page=2") || !strings.Contains(gotQuery, "pageSize=5") {
+		t.Fatalf("search path=%s query=%s", gotPath, gotQuery)
+	}
+
+	detail, err := client.InspectModCatalog(ctx, "srv-1", "tiny-mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(detail), `"latestVersion":"1.2.3"`) {
+		t.Fatalf("detail %s", detail)
+	}
+
+	state, err = client.SetModCredentials(ctx, "srv-1", "setup-a", "player", "secret-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.CredentialsConfigured || gotKey != "" || !strings.Contains(gotBody, `"username":"player"`) {
+		t.Fatalf("credentials key=%q body=%s state=%+v", gotKey, gotBody, state)
+	}
+
+	state, err = client.ClearModCredentials(ctx, "srv-1", "setup-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CredentialsConfigured || gotMethod != http.MethodDelete || !strings.Contains(gotBody, `"expectedSetupID":"setup-a"`) {
+		t.Fatalf("clear-credentials %s body=%s state=%+v", gotMethod, gotBody, state)
+	}
+
+	state, err = client.StageMod(ctx, "srv-1", "setup-a", "factorio-mod-portal", "tiny-mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Staged == nil || state.Staged.StageID != "stage-sha" || gotKey != "" {
+		t.Fatalf("stage key=%q state=%+v", gotKey, state)
+	}
+	if !strings.Contains(gotBody, `"providerID":"factorio-mod-portal"`) || !strings.Contains(gotBody, `"providerModID":"tiny-mod"`) {
+		t.Fatalf("stage body %s", gotBody)
+	}
+
+	state, err = client.UnstageMod(ctx, "srv-1", "setup-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Staged == nil || state.Staged.Operation != "remove" {
+		t.Fatalf("unstage %+v", state)
+	}
+
+	state, err = client.DiscardMod(ctx, "srv-1", "setup-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Staged != nil {
+		t.Fatalf("discard %+v", state)
+	}
+
+	state, err = client.ApplyMod(ctx, "srv-1", "setup-a", "stage-sha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Enabled == nil || state.Enabled.ProviderModID != "tiny-mod" || gotKey != "" {
+		t.Fatalf("apply key=%q state=%+v", gotKey, state)
+	}
+	if !strings.Contains(gotBody, `"stageID":"stage-sha"`) {
+		t.Fatalf("apply body %s", gotBody)
+	}
+}
+
+func TestModsApplySurfacesAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":{"code":"server_not_confirmed_stopped","message":"mod changes can be applied only while the Server is confirmed stopped"}}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "tok")
+	_, err := client.ApplyMod(context.Background(), "srv-1", "setup-a", "stage-sha")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.Code != "server_not_confirmed_stopped" {
+		t.Fatalf("err %#v", err)
+	}
+}

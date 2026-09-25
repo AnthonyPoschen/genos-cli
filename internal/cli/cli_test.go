@@ -1071,3 +1071,247 @@ func TestSchema(t *testing.T) {
 		t.Fatalf("alias stdout %q", stdout.String())
 	}
 }
+
+func TestModsList(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/servers/srv-1/mods" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":false}}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "list", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"setupID": "setup-a"`) || strings.Contains(out, `"mods"`) {
+		t.Fatalf("stdout %q", out)
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Auth != "Bearer "+testToken || hits[0].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestModsSearchAndShow(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods/catalog":
+			if r.URL.Query().Get("q") != "tiny" || r.URL.Query().Get("category") != "logistics" {
+				t.Fatalf("query %s", r.URL.RawQuery)
+			}
+			_, _ = io.WriteString(w, `{"catalog":{"query":"tiny","results":[{"providerModID":"tiny-mod","title":"Tiny Mod"}]}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods/catalog/tiny-mod":
+			_, _ = io.WriteString(w, `{"mod":{"providerModID":"tiny-mod","title":"Tiny Mod","latestVersion":"1.2.3"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "search", "srv-1", "--query", "tiny", "--category", "logistics"}, opts); code != 0 {
+		t.Fatalf("search exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"providerModID": "tiny-mod"`) || strings.Contains(stdout.String(), `"catalog"`) {
+		t.Fatalf("search stdout %q", stdout.String())
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "show", "srv-1", "tiny-mod"}, opts); code != 0 {
+		t.Fatalf("show exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"latestVersion": "1.2.3"`) || strings.Contains(stdout.String(), `"mod"`) {
+		t.Fatalf("show stdout %q", stdout.String())
+	}
+	_ = rec.snapshot()
+}
+
+func TestModsStageAutofillExpectedSetup(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":true}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/mods/staged-selection":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":true,"staged":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","stageID":"stage-sha"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "stage", "srv-1", "tiny-mod", "--provider", "factorio-mod-portal"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"stageID": "stage-sha"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 {
+		t.Fatalf("hits %+v", hits)
+	}
+	if hits[0].Method != http.MethodGet || hits[1].Method != http.MethodPut || hits[1].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	var body map[string]string
+	if err := json.Unmarshal([]byte(hits[1].Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["expectedSetupID"] != "setup-a" || body["providerID"] != "factorio-mod-portal" || body["providerModID"] != "tiny-mod" {
+		t.Fatalf("body %#v", body)
+	}
+}
+
+func TestModsApplyAutofillStageID(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"staged":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","stageID":"stage-sha"}}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/apply":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"enabled":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "apply", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"providerModID": "tiny-mod"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 || hits[1].Method != http.MethodPost || hits[1].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	var body map[string]string
+	if err := json.Unmarshal([]byte(hits[1].Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["expectedSetupID"] != "setup-a" || body["stageID"] != "stage-sha" {
+		t.Fatalf("body %#v", body)
+	}
+}
+
+func TestModsApplyNothingStagedFailsClearly(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods" {
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "apply", "srv-1"}, opts); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "no staged mod to apply") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+	hits := rec.snapshot()
+	for _, item := range hits {
+		if item.Method == http.MethodPost {
+			t.Fatalf("unexpected POST %+v", hits)
+		}
+	}
+}
+
+func TestModsDiscardAndCredentials(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":false}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/mods/credentials":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"credentialsConfigured":true}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/discard":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "credentials", "srv-1", "--username", "player", "--token", "secret"}, opts); code != 0 {
+		t.Fatalf("credentials exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"credentialsConfigured": true`) {
+		t.Fatalf("credentials stdout %q", stdout.String())
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "discard", "srv-1", "--expected-setup", "setup-a"}, opts); code != 0 {
+		t.Fatalf("discard exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var discard hit
+	for _, item := range hits {
+		if item.Method == http.MethodPost && item.Path == "/api/v1/servers/srv-1/mods/discard" {
+			discard = item
+		}
+	}
+	if discard.Method == "" || discard.Key != "" || !strings.Contains(discard.Body, `"expectedSetupID":"setup-a"`) {
+		t.Fatalf("discard hit %+v from %+v", discard, hits)
+	}
+}
+
+func TestModsStageRequiresProvider(t *testing.T) {
+	opts, _, stderr := testOptions(t.TempDir(), "https://genosservers.com", testToken, nil)
+	if code := Run([]string{"mods", "stage", "srv-1", "tiny-mod"}, opts); code != 2 {
+		t.Fatalf("exit %d stderr %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--provider") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestModsApplyRunningSurfacesAPIError(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":false,"staged":{"stageID":"stage-sha","providerModID":"tiny-mod"}}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/apply":
+			w.WriteHeader(http.StatusConflict)
+			_, _ = io.WriteString(w, `{"error":{"code":"server_not_confirmed_stopped","message":"mod changes can be applied only while the Server is confirmed stopped"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "apply", "srv-1"}, opts); code == 0 {
+		t.Fatal("expected failure while Running")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "server_not_confirmed_stopped") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
