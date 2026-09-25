@@ -11,14 +11,14 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 
 ## Commands
 
-- `genos server list` lists each server's name, game name, and status.
-- `genos server status <serverID>` prints those fields for one server.
+- `genos server list` prints a headered table of ID, NAME, GAME, STATUS (or `No servers.` when empty).
+- `genos server status <serverID>` prints the same columns for one server.
 - `genos server start <serverID>` starts a server and does not prompt.
 - `genos server stop <serverID>` asks `Stop <name>?` unless `--yes`.
 - `genos server force-stop <serverID>` warns that unsaved progress will be lost unless `--yes`.
 - `genos server restart <serverID>` asks when players are online or notable updates are pending, unless `--yes`.
 - `genos rcon send <serverID> <text...>` sends one console command and prints the response.
-- `genos server profile list <serverID>` lists profiles (`id`, `name`, `game`) and marks the selected one with `*`; also prints `creatable\t<gameID>\t<name>` lines from `creatableGames`.
+- `genos server profile list <serverID>` prints a headered table of ID, NAME, GAME, SELECTED (`*` on the selected row), then a separate `Creatable games:` section from `creatableGames` (not mixed as fake data rows).
 - `genos server profile select <serverID> <setupID> [--expected <id>]` selects a profile. Without `--expected`, GETs setups and uses `selectedSetupID`.
 - `genos server profile unload <serverID> [--expected <id>]` unloads the selected profile (same `--expected` default).
 - `genos server rename <serverID> <name>` renames a server (JSON). API must confirm Stopped; never invent success.
@@ -47,7 +47,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos me` prints `GET /api/v1/me` JSON (id, clerkUserID, sessionID, primaryEmail, isPlatformAdmin).
 - `genos dashboard` prints `GET /api/v1/dashboard` JSON (servers, profiles, profileCapacity).
 - `genos catalog` prints public `GET /api/v1/catalog` JSON.
-- `genos profile list` lists library profiles from dashboard (there is **no** `GET /profiles` list route) and prints `capacity\tused\tlimit`.
+- `genos profile list` lists library profiles from dashboard (there is **no** `GET /profiles` list route) as a headered table, then a separate `Capacity: used/limit` line.
 - `genos profile games` prints creatable library games JSON (`GET /profiles/games`).
 - `genos profile create --game <gameID>` creates a library profile (JSON).
 - `genos profile rename <profileID> <name> [--expected-name <name>]` renames; autofills expectedName from dashboard when omitted.

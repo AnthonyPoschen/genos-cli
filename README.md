@@ -81,11 +81,11 @@ genos schema <gameID>
 
 ### `genos server` — operate a game server
 
-`list` / `status` print name, game, and status.
+`list` / `status` print a headered table of ID, NAME, GAME, STATUS (`No servers.` when the list is empty).
 
 `start` does not prompt. `stop` asks `Stop <name>?` unless `--yes`. `force-stop` asks for confirmation that mentions unsaved progress unless `--yes`, then tells the API that unsaved progress may be lost. `restart` asks when `playerCount` is greater than zero or `notableUpdates` is not empty, unless `--yes`. If a prompt is required, stdin is not a terminal, and `--yes` was not passed, genos exits without sending the action.
 
-`profile list` lists each profile for a server as `id`, `name`, `game`, and marks the selected one with `*`. `profile select` / `profile unload` change the selected profile (PUT/DELETE `/api/v1/servers/{id}/selected-setup`). They require the server to be confirmed Stopped on the API. Both send `expectedSelectedSetupID` for compare-and-swap. When `--expected` is omitted, genos GETs setups first and uses `selectedSetupID`. **Attach only** — create/rename/delete/config/mods/saves for profiles live under `genos profile`.
+`profile list` prints a headered table (ID, NAME, GAME, SELECTED) and a separate `Creatable games:` section when present. `profile select` / `profile unload` change the selected profile (PUT/DELETE `/api/v1/servers/{id}/selected-setup`). They require the server to be confirmed Stopped on the API. Both send `expectedSelectedSetupID` for compare-and-swap. When `--expected` is omitted, genos GETs setups first and uses `selectedSetupID`. **Attach only** — create/rename/delete/config/mods/saves for profiles live under `genos profile`.
 
 `rename` renames a server (`PATCH /api/v1/servers/{id}`). API must confirm Stopped.
 
@@ -99,7 +99,7 @@ genos schema <gameID>
 
 ### `genos profile` — library edits
 
-`list` / `games` / `create --game` / `rename` / `delete --yes` manage library profiles (`POST /profiles`, etc.). Attach to a running server with `genos server profile select`.
+`list` prints a headered library-profile table then a separate `Capacity: used/limit` line. `games` / `create --game` / `rename` / `delete --yes` manage library profiles (`POST /profiles`, etc.). Attach to a running server with `genos server profile select`.
 
 `config get|put`, `mods …`, and `saves …` prep a library profile before attach (same flags as the server-side commands).
 

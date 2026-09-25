@@ -53,20 +53,21 @@ func (r *runner) profilesList(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	for _, profile := range dashboard.Profiles {
-		mark := ""
-		if profile.Selected {
-			mark = "*"
+	if len(dashboard.Profiles) == 0 {
+		WriteEmpty(r.out, "No profiles.")
+	} else {
+		rows := make([][]string, 0, len(dashboard.Profiles))
+		for _, profile := range dashboard.Profiles {
+			mark := ""
+			if profile.Selected {
+				mark = "*"
+			}
+			rows = append(rows, []string{profile.ID, profile.Name, profile.Game.Name, profile.ServerName, mark})
 		}
-		fmt.Fprintf(r.out, "%s\t%s\t%s\t%s\t%s\n",
-			oneLine(profile.ID),
-			oneLine(profile.Name),
-			oneLine(profile.Game.Name),
-			oneLine(profile.ServerName),
-			mark,
-		)
+		WriteTable(r.out, []string{"ID", "NAME", "GAME", "SERVER", "SELECTED"}, rows)
 	}
-	fmt.Fprintf(r.out, "capacity\t%d\t%d\n", dashboard.ProfileCapacity.Used, dashboard.ProfileCapacity.Limit)
+	fmt.Fprintln(r.out)
+	fmt.Fprintf(r.out, "Capacity: %d/%d\n", dashboard.ProfileCapacity.Used, dashboard.ProfileCapacity.Limit)
 	return 0
 }
 

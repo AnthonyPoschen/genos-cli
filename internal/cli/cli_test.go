@@ -135,8 +135,9 @@ func TestServersAndStatus(t *testing.T) {
 	if code := Run([]string{"server", "list"}, opts); code != 0 {
 		t.Fatalf("servers exit %d stderr %s", code, stderr.String())
 	}
-	if stdout.String() != "Alpha\tFactorio\tRunning\nBeta\tRust\tStopped\n" {
-		t.Fatalf("servers output %q", stdout.String())
+	wantServers := "ID     NAME   GAME      STATUS\nsrv-1  Alpha  Factorio  Running\nsrv-2  Beta   Rust      Stopped\n"
+	if stdout.String() != wantServers {
+		t.Fatalf("servers output %q want %q", stdout.String(), wantServers)
 	}
 	hits := rec.snapshot()
 	if len(hits) != 1 || hits[0].Auth != "Bearer "+testToken || hits[0].Path != "/api/v1/servers" {
@@ -148,8 +149,24 @@ func TestServersAndStatus(t *testing.T) {
 	if code := Run([]string{"server", "status", "srv-1"}, opts); code != 0 {
 		t.Fatalf("status exit %d stderr %s", code, stderr.String())
 	}
-	if stdout.String() != "Alpha\tFactorio\tRunning\n" {
-		t.Fatalf("status output %q", stdout.String())
+	wantStatus := "ID     NAME   GAME      STATUS\nsrv-1  Alpha  Factorio  Running\n"
+	if stdout.String() != wantStatus {
+		t.Fatalf("status output %q want %q", stdout.String(), wantStatus)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"servers":[]}`)
+	}))
+	defer empty.Close()
+	optsEmpty, stdoutEmpty, stderrEmpty := testOptions(t.TempDir(), empty.URL, testToken, nil)
+	if code := Run([]string{"server", "list"}, optsEmpty); code != 0 {
+		t.Fatalf("empty servers exit %d stderr %s", code, stderrEmpty.String())
+	}
+	if stdoutEmpty.String() != "No servers.\n" {
+		t.Fatalf("empty servers output %q", stdoutEmpty.String())
 	}
 }
 
@@ -623,7 +640,7 @@ func TestSetupsList(t *testing.T) {
 	if code := Run([]string{"server", "profile", "list", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
-	want := "setup-a\tMain\tFactorio\t*\nsetup-b\tAlt\tFactorio\t\n"
+	want := "ID       NAME  GAME      SELECTED\nsetup-a  Main  Factorio  *\nsetup-b  Alt   Factorio  \n"
 	if stdout.String() != want {
 		t.Fatalf("stdout %q want %q", stdout.String(), want)
 	}
@@ -1525,11 +1542,17 @@ func TestSetupsListPrintsCreatableGames(t *testing.T) {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "setup-a\tMain\tFactorio\t*") {
+	if !strings.Contains(got, "setup-a  Main  Factorio  *") {
 		t.Fatalf("stdout missing setup line: %q", got)
 	}
-	if !strings.Contains(got, "creatable\tfactorio\tFactorio\n") || !strings.Contains(got, "creatable\trust\tRust\n") {
-		t.Fatalf("stdout missing creatable lines: %q", got)
+	if !strings.Contains(got, "Creatable games:\n") {
+		t.Fatalf("stdout missing creatable section: %q", got)
+	}
+	if strings.Contains(got, "creatable\t") {
+		t.Fatalf("stdout still has fake creatable TSV rows: %q", got)
+	}
+	if !strings.Contains(got, "factorio  Factorio") || !strings.Contains(got, "rust      Rust") {
+		t.Fatalf("stdout missing creatable rows: %q", got)
 	}
 }
 
@@ -1707,8 +1730,15 @@ func TestProfilesCreateRenameDeleteAutofill(t *testing.T) {
 	if code := Run([]string{"profile", "list"}, opts); code != 0 {
 		t.Fatalf("profiles exit %d stderr %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "prof-1\tOld\tFactorio") || !strings.Contains(stdout.String(), "capacity\t1\t5") {
-		t.Fatalf("profiles list %q", stdout.String())
+	gotProfiles := stdout.String()
+	if !strings.Contains(gotProfiles, "prof-1  Old   Factorio") {
+		t.Fatalf("profiles list missing row: %q", gotProfiles)
+	}
+	if !strings.Contains(gotProfiles, "Capacity: 1/5\n") {
+		t.Fatalf("profiles list missing capacity: %q", gotProfiles)
+	}
+	if strings.Contains(gotProfiles, "capacity\t") {
+		t.Fatalf("profiles list still has fake capacity TSV row: %q", gotProfiles)
 	}
 	stdout.Reset()
 	stderr.Reset()
