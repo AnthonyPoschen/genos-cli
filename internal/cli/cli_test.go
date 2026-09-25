@@ -1315,3 +1315,196 @@ func TestModsApplyRunningSurfacesAPIError(t *testing.T) {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
+
+func TestSavesExportWaitAndOutput(t *testing.T) {
+	rec := &recorder{}
+	var gets int
+	var downloadHits int
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/save-exports":
+			if r.Header.Get("Idempotency-Key") != "" {
+				t.Fatalf("unexpected idempotency key")
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"pending","progressPercent":0,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/save-exports/exp-1":
+			gets++
+			if gets == 1 {
+				_, _ = io.WriteString(w, `{"export":{"id":"exp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"running","progressPercent":40,"stage":"pack","requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"succeeded","progressPercent":100,"downloadURL":"`+ "http://"+r.Host+`/file.zip","archiveName":"save.zip","archiveBytes":9,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/file.zip":
+			downloadHits++
+			w.Header().Set("Content-Type", "application/zip")
+			_, _ = io.WriteString(w, "SAVEBYTES")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "save.zip")
+	opts, stdout, stderr := testOptions(dir, server.URL, testToken, nil)
+	if code := Run([]string{"saves", "export", "srv-1", "--wait", "--interval", "100ms", "--timeout", "1m", "--output", outPath}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"status": "succeeded"`) || !strings.Contains(stdout.String(), `"id": "exp-1"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "downloadURL") || !strings.Contains(stderr.String(), "running") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil || string(data) != "SAVEBYTES" || downloadHits != 1 {
+		t.Fatalf("file %q err=%v hits=%d", data, err, downloadHits)
+	}
+	hits := rec.snapshot()
+	if len(hits) < 2 || hits[0].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestSavesExportFailedExitsNonZero(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-9","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"pending","progressPercent":0,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		default:
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-9","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"failed","progressPercent":10,"message":"boom","requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"saves", "export", "srv-1", "--wait", "--interval", "100ms", "--timeout", "1m"}, opts); code == 0 {
+		t.Fatalf("expected non-zero, stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"status": "failed"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+}
+
+func TestSavesImportWaitRequiresYes(t *testing.T) {
+	var uploadAuth, createKey string
+	var createBody string
+	var uploadServer *httptest.Server
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/save-imports":
+			createBody = string(payload)
+			createKey = r.Header.Get("Idempotency-Key")
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"import":{"id":"imp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"awaiting_upload","progressPercent":0,"uploadURL":"`+uploadServer.URL+`/put","fileName":"world.zip","mediaType":"application/zip","archiveBytes":4,"addonSetDiffers":false,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/save-imports/imp-1/validate":
+			_, _ = io.WriteString(w, `{"import":{"id":"imp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"ready","progressPercent":40,"addonSetDiffers":false,"review":{"fileName":"world.zip","archiveBytes":4,"irreversible":true},"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer api.Close()
+	uploadServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uploadAuth = r.Header.Get("Authorization")
+		if r.Header.Get("Content-Type") != "application/zip" {
+			t.Fatalf("content-type %q", r.Header.Get("Content-Type"))
+		}
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != "zip!" {
+			t.Fatalf("body %q", body)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer uploadServer.Close()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "world.zip")
+	if err := os.WriteFile(filePath, []byte("zip!"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts, stdout, stderr := testOptions(dir, api.URL, testToken, nil)
+	code := Run([]string{"saves", "import", "srv-1", "--file", filePath, "--wait", "--interval", "100ms", "--timeout", "1m"}, opts)
+	if code == 0 {
+		t.Fatalf("expected non-zero without --yes")
+	}
+	if !strings.Contains(createBody, `"fileName":"world.zip"`) || createKey != "" {
+		t.Fatalf("create body=%s key=%q", createBody, createKey)
+	}
+	if !strings.Contains(stdout.String(), `"status": "ready"`) || !strings.Contains(stderr.String(), "import-replace") {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if uploadAuth != "" {
+		t.Fatalf("upload sent auth %q", uploadAuth)
+	}
+}
+
+func TestSavesImportWaitYesReplace(t *testing.T) {
+	var replaceBody string
+	var gets int
+	var uploadServer *httptest.Server
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/save-imports":
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"import":{"id":"imp-2","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"awaiting_upload","progressPercent":0,"uploadURL":"`+uploadServer.URL+`/put","fileName":"world.zip","mediaType":"application/zip","archiveBytes":4,"addonSetDiffers":true,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/save-imports/imp-2/validate":
+			_, _ = io.WriteString(w, `{"import":{"id":"imp-2","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"ready","progressPercent":40,"addonSetDiffers":true,"review":{"addonSetDiffers":true},"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/save-imports/imp-2/replace":
+			replaceBody = string(payload)
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"import":{"id":"imp-2","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"pending","progressPercent":50,"addonSetDiffers":true,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/save-imports/imp-2":
+			gets++
+			if gets == 1 {
+				_, _ = io.WriteString(w, `{"import":{"id":"imp-2","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"running","progressPercent":80,"recovery":"snapshot-created","addonSetDiffers":true,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"import":{"id":"imp-2","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"succeeded","progressPercent":100,"recovery":"snapshot-created","addonSetDiffers":true,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer api.Close()
+	uploadServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer uploadServer.Close()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "world.zip")
+	if err := os.WriteFile(filePath, []byte("zip!"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts, stdout, stderr := testOptions(dir, api.URL, testToken, nil)
+	code := Run([]string{"saves", "import", "srv-1", "--file", filePath, "--wait", "--yes", "--apply-save-mods", "--interval", "100ms", "--timeout", "1m"}, opts)
+	if code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"status": "succeeded"`) || !strings.Contains(stdout.String(), `"recovery": "snapshot-created"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(replaceBody, `"acknowledged":true`) || !strings.Contains(replaceBody, `"applySaveMods":true`) {
+		t.Fatalf("replace body %s", replaceBody)
+	}
+	if !strings.Contains(stderr.String(), "recovery=snapshot-created") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestSavesImportReplaceRequiresYes(t *testing.T) {
+	opts, _, stderr := testOptions(t.TempDir(), "http://example.invalid", testToken, nil)
+	if code := Run([]string{"saves", "import-replace", "srv-1", "imp-1"}, opts); code != 2 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--yes") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}

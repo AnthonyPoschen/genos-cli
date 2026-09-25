@@ -42,6 +42,12 @@ Usage:
   genos mods unstage <serverID> [--expected-setup ID]
   genos mods discard <serverID> [--expected-setup ID]
   genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]
+  genos saves export <serverID> [--wait] [--interval 2s] [--timeout 15m] [--output path]
+  genos saves export-status <serverID> <exportID>
+  genos saves import <serverID> --file path.zip [--media-type application/zip] [--wait] [--interval 2s] [--timeout 30m] [--apply-save-mods|--no-apply-save-mods] [--yes]
+  genos saves import-status <serverID> <importID>
+  genos saves import-validate <serverID> <importID>
+  genos saves import-replace <serverID> <importID> --yes [--apply-save-mods|--no-apply-save-mods]
   genos auth login
   genos auth token
   genos auth status
@@ -81,6 +87,25 @@ omitted (fails clearly if nothing is staged). mods stage requires
 such as server_not_confirmed_stopped and mod_provider_credentials_required
 are surfaced as-is. Profile /api/v1/profiles/.../mods mirrors, draft-set,
 draft-apply, and import are out of scope for this release.
+
+saves export starts a server save export (POST …/save-exports). Without
+--wait it prints the export JSON immediately. With --wait it polls until
+succeeded|failed|expired (default interval 2s, timeout 15m; caps: interval
+100ms–1m, timeout ≤24h). Progress lines go to stderr; the final export JSON
+goes to stdout. On success the downloadURL is printed to stderr; bytes are
+downloaded only when --output is set (never a silent large write). failed
+and expired exit non-zero after printing JSON.
+
+saves import uploads a zip via the dashboard flow: create → PUT uploadURL
+(Content-Type application/zip, no Genos bearer) → optional validate/replace.
+Without --wait: create+upload then print import JSON. With --wait: validate,
+poll to ready (or failed/expired), then require --yes before replace
+(destructive); without --yes stop after ready with JSON and an
+import-replace hint. With --yes: replace then poll to succeeded|failed|expired
+(default timeout 30m). --apply-save-mods / --no-apply-save-mods set
+applySaveMods when the review requires a mod choice. recovery is surfaced
+on progress lines and in JSON. Profile /api/v1/profiles/…/save-* mirrors
+are deferred.
 `
 
 // Options configures process dependencies. Zero values use the real process.
@@ -140,6 +165,8 @@ func Run(args []string, opts Options) int {
 		return runner.schema(args[1:])
 	case "mods":
 		return runner.mods(args[1:])
+	case "saves":
+		return runner.saves(args[1:])
 	case "auth":
 		return runner.auth(args[1:])
 	default:
