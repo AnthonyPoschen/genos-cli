@@ -21,6 +21,9 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos setups <serverID>` lists profiles (`id`, `name`, `game`) and marks the selected one with `*`.
 - `genos select-setup <serverID> <setupID> [--expected <id>]` selects a profile. Without `--expected`, GETs setups and uses `selectedSetupID`.
 - `genos unload-setup <serverID> [--expected <id>]` unloads the selected profile (same `--expected` default).
+- `genos config get <serverID>` prints selected setup configuration JSON.
+- `genos config put <serverID> [--file path]` PUTs configuration. Preferred: full body with `expectedSetupID`, `expectedUpdatedAt`, `version`, `values` (+ optional `secrets`) on stdin/`--file`. If concurrency fields are omitted but `values` is present, GETs configuration first and fills them. API errors (e.g. `server_not_confirmed_stopped`) are surfaced as-is.
+- `genos schema <gameID>` (alias `management-schema`) prints the public management-schema JSON.
 - `genos auth status` shows the origin, whether the token came from `env`, `keyring`, or `file`, and a token prefix only.
 - `genos auth login` and `genos auth token` are for a human. Never pass a token as an argument.
 

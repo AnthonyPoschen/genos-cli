@@ -580,3 +580,83 @@ func (c *Client) UnloadSetup(ctx context.Context, serverID, expectedSelectedSetu
 	}
 	return nil
 }
+
+// Configuration is the selected setup configuration for a server.
+type Configuration struct {
+	SetupID        string               `json:"setupID"`
+	Name           string               `json:"name,omitempty"`
+	GameID         string               `json:"gameID"`
+	GameName       string               `json:"gameName,omitempty"`
+	ServerID       string               `json:"serverID,omitempty"`
+	ServerName     string               `json:"serverName,omitempty"`
+	Selected       bool                 `json:"selected,omitempty"`
+	Version        string               `json:"version"`
+	Values         json.RawMessage      `json:"values"`
+	Editable       bool                 `json:"editable"`
+	ReadOnlyReason string               `json:"readOnlyReason,omitempty"`
+	UpdatedAt      time.Time            `json:"updatedAt"`
+	CreatedAt      time.Time            `json:"createdAt,omitempty"`
+	Secrets        ConfigurationSecrets `json:"secrets"`
+}
+
+// ConfigurationSecrets is the secret status summary on a configuration.
+type ConfigurationSecrets struct {
+	Version    string `json:"version"`
+	Configured bool   `json:"configured"`
+	Pending    bool   `json:"pending"`
+}
+
+// GetConfiguration calls GET /api/v1/servers/{id}/configuration.
+// Idempotency-Key is not sent (matches dashboard).
+func (c *Client) GetConfiguration(ctx context.Context, serverID string) (Configuration, error) {
+	data, status, err := c.do(ctx, http.MethodGet, "/api/v1/servers/"+url.PathEscape(serverID)+"/configuration", nil, false)
+	if err != nil {
+		return Configuration{}, err
+	}
+	if status < 200 || status >= 300 {
+		return Configuration{}, apiError(status, data)
+	}
+	var payload struct {
+		Configuration Configuration `json:"configuration"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return Configuration{}, fmt.Errorf("configuration response: %w", err)
+	}
+	return payload.Configuration, nil
+}
+
+// PutConfiguration calls PUT /api/v1/servers/{id}/configuration.
+// body must already include expectedSetupID, expectedUpdatedAt, version, and values.
+// Idempotency-Key is not sent (matches dashboard).
+func (c *Client) PutConfiguration(ctx context.Context, serverID string, body any) (Configuration, error) {
+	data, status, err := c.do(ctx, http.MethodPut, "/api/v1/servers/"+url.PathEscape(serverID)+"/configuration", body, false)
+	if err != nil {
+		return Configuration{}, err
+	}
+	if status < 200 || status >= 300 {
+		return Configuration{}, apiError(status, data)
+	}
+	var payload struct {
+		Configuration Configuration `json:"configuration"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return Configuration{}, fmt.Errorf("configuration response: %w", err)
+	}
+	return payload.Configuration, nil
+}
+
+// GetManagementSchema calls GET /api/v1/games/{gameID}/management-schema.
+// The route is public; auth is optional. Idempotency-Key is not sent.
+func (c *Client) GetManagementSchema(ctx context.Context, gameID string) (json.RawMessage, error) {
+	data, status, err := c.do(ctx, http.MethodGet, "/api/v1/games/"+url.PathEscape(gameID)+"/management-schema", nil, false)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, apiError(status, data)
+	}
+	if !json.Valid(data) {
+		return nil, errors.New("management schema response is not valid JSON")
+	}
+	return json.RawMessage(data), nil
+}

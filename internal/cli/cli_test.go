@@ -817,3 +817,257 @@ func TestExpectedFlagRequiresValue(t *testing.T) {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
+
+func TestConfigGet(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/servers/srv-1/configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","name":"Main","gameID":"factorio","version":"v1","values":{"name":"Alpha"},"editable":true,"updatedAt":"2026-01-02T03:04:05Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"config", "get", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, `"setupID": "setup-a"`) || !strings.Contains(out, `"version": "v1"`) {
+		t.Fatalf("stdout %q", out)
+	}
+	if strings.Contains(out, `"configuration"`) {
+		t.Fatalf("should print inner configuration object, got %q", out)
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Auth != "Bearer "+testToken || hits[0].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestConfigPutFullBody(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/configuration" {
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","version":"v1","values":{"name":"Beta"},"editable":true,"updatedAt":"2026-01-02T04:00:00Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	body := `{"expectedSetupID":"setup-a","expectedUpdatedAt":"2026-01-02T03:04:05Z","version":"v1","values":{"name":"Beta"}}`
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Stdin = strings.NewReader(body)
+	if code := Run([]string{"config", "put", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"name": "Beta"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Method != http.MethodPut || hits[0].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	var put map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(hits[0].Body), &put); err != nil {
+		t.Fatal(err)
+	}
+	if string(put["expectedSetupID"]) != `"setup-a"` || string(put["version"]) != `"v1"` {
+		t.Fatalf("body %s", hits[0].Body)
+	}
+}
+
+func TestConfigPutAutofillFromGET(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","version":"v1","values":{"name":"Alpha"},"editable":true,"updatedAt":"2026-01-02T03:04:05Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","version":"v1","values":{"name":"Beta"},"editable":true,"updatedAt":"2026-01-02T04:00:00Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Stdin = strings.NewReader(`{"values":{"name":"Beta"}}`)
+	if code := Run([]string{"config", "put", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"name": "Beta"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 {
+		t.Fatalf("hits %+v", hits)
+	}
+	if hits[0].Method != http.MethodGet || hits[0].Path != "/api/v1/servers/srv-1/configuration" {
+		t.Fatalf("first hit %+v", hits[0])
+	}
+	put := hits[1]
+	if put.Method != http.MethodPut || put.Key != "" {
+		t.Fatalf("put %+v", put)
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(put.Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if string(body["expectedSetupID"]) != `"setup-a"` {
+		t.Fatalf("expectedSetupID %s", body["expectedSetupID"])
+	}
+	if string(body["version"]) != `"v1"` {
+		t.Fatalf("version %s", body["version"])
+	}
+	if !strings.Contains(string(body["expectedUpdatedAt"]), "2026-01-02T03:04:05") {
+		t.Fatalf("expectedUpdatedAt %s", body["expectedUpdatedAt"])
+	}
+}
+
+func TestConfigPutFile(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPut {
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","version":"v1","values":{"name":"FromFile"},"editable":true,"updatedAt":"2026-01-02T04:00:00Z","secrets":{"version":"s1","configured":false,"pending":false}}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "put.json")
+	if err := os.WriteFile(path, []byte(`{"expectedSetupID":"setup-a","expectedUpdatedAt":"2026-01-02T03:04:05Z","version":"v1","values":{"name":"FromFile"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"config", "put", "srv-1", "--file", path}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"FromFile"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Method != http.MethodPut {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestConfigPutMissingValuesFailsBeforeAPI(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Stdin = strings.NewReader(`{"expectedSetupID":"setup-a","version":"v1"}`)
+	if code := Run([]string{"config", "put", "srv-1"}, opts); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if !strings.Contains(stderr.String(), "values") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+	if hits := rec.snapshot(); len(hits) != 0 {
+		t.Fatalf("unexpected hits %+v", hits)
+	}
+}
+
+func TestConfigPutInvalidJSONFailsBeforeAPI(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Stdin = strings.NewReader(`[1,2,3]`)
+	if code := Run([]string{"config", "put", "srv-1"}, opts); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if !strings.Contains(stderr.String(), "JSON object") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+	if hits := rec.snapshot(); len(hits) != 0 {
+		t.Fatalf("unexpected hits %+v", hits)
+	}
+}
+
+func TestConfigPutRunningSurfacesAPIError(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","version":"v1","values":{"name":"Alpha"},"editable":false,"updatedAt":"2026-01-02T03:04:05Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/configuration":
+			w.WriteHeader(http.StatusConflict)
+			_, _ = io.WriteString(w, `{"error":{"code":"server_not_confirmed_stopped","message":"the Server must be confirmed stopped before changing configuration"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Stdin = strings.NewReader(`{"values":{"name":"Beta"}}`)
+	if code := Run([]string{"config", "put", "srv-1"}, opts); code == 0 {
+		t.Fatal("expected failure while Running")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "server_not_confirmed_stopped") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+	hits := rec.snapshot()
+	var putCount int
+	for _, item := range hits {
+		if item.Method == http.MethodPut {
+			putCount++
+		}
+	}
+	if putCount != 1 {
+		t.Fatalf("expected one PUT, hits %+v", hits)
+	}
+}
+
+func TestSchema(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/games/factorio/management-schema" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"gameID":"factorio","configuration":{"sections":[{"id":"broadcast"}]}}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"schema", "factorio"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"gameID": "factorio"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Key != "" || hits[0].Auth != "Bearer "+testToken {
+		t.Fatalf("hits %+v", hits)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"management-schema", "factorio"}, opts); code != 0 {
+		t.Fatalf("alias exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"broadcast"`) {
+		t.Fatalf("alias stdout %q", stdout.String())
+	}
+}

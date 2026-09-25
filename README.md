@@ -53,6 +53,10 @@ genos console <serverID> <text...>
 genos setups <serverID>
 genos select-setup <serverID> <setupID> [--expected <id>]
 genos unload-setup <serverID> [--expected <id>]
+genos config get <serverID>
+genos config put <serverID> [--file path]
+genos schema <gameID>
+genos management-schema <gameID>
 genos auth login
 genos auth token
 genos auth status
@@ -67,3 +71,9 @@ genos auth status
 `setups` lists each profile for a server as `id`, `name`, `game`, and marks the selected one with `*`.
 
 `select-setup` and `unload-setup` change the selected profile (PUT/DELETE `/api/v1/servers/{id}/selected-setup`). They require the server to be confirmed Stopped on the API; a Running server surfaces the API error `server_not_confirmed_stopped` (no client-side fake success). Both send `expectedSelectedSetupID` for compare-and-swap. When `--expected` is omitted, genos GETs `/api/v1/servers/{id}/setups` first and uses that response's `selectedSetupID` (empty string if none). When `--expected` is passed, its value is sent as-is; the flag requires a following value.
+
+`config get` prints the selected setup configuration JSON from `GET /api/v1/servers/{id}/configuration` (the inner `configuration` object, pretty-printed).
+
+`config put` sends `PUT /api/v1/servers/{id}/configuration`. The body is read from `--file` or stdin and must be a JSON object that includes `values`. **Preferred agent path:** include the full concurrency fields yourself — `expectedSetupID`, `expectedUpdatedAt` (RFC3339 from `configuration.updatedAt`), `version`, and `values` (optional `secrets`). **Convenience (P1.1-style default):** if any of those three concurrency fields is omitted, genos GETs configuration first and fills the missing ones from the live object (`setupID` → `expectedSetupID`, `updatedAt` → `expectedUpdatedAt`, `version` → `version`). A non-object body or a body without `values` fails with a usage error before calling the API. PUT failures such as `server_not_confirmed_stopped`, `configuration_changed`, or `selected_setup_changed` are surfaced as-is (no client-side fake success). No `Idempotency-Key` is sent (matches the dashboard).
+
+`schema` (alias `management-schema`) prints the public management-schema JSON from `GET /api/v1/games/{gameID}/management-schema`.
