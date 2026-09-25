@@ -29,6 +29,10 @@ Usage:
   genos setups <serverID>
   genos select-setup <serverID> <setupID> [--expected <id>]
   genos unload-setup <serverID> [--expected <id>]
+  genos config get <serverID>
+  genos config put <serverID> [--file path]
+  genos schema <gameID>
+  genos management-schema <gameID>
   genos auth login
   genos auth token
   genos auth status
@@ -49,6 +53,14 @@ select-setup and unload-setup send expectedSelectedSetupID for compare-
 and-swap. When --expected is omitted, genos GETs setups first and uses
 selectedSetupID (empty string if none). When --expected is passed, its
 value is sent as-is (--expected requires a following value).
+
+config put reads a JSON object from --file or stdin. Preferred path: the
+body already includes expectedSetupID, expectedUpdatedAt, version, and
+values (optional secrets). If values is present but any of those three
+concurrency fields is omitted, genos GETs configuration first and fills
+the missing fields (setupID, updatedAt, version). A body that is not a
+JSON object or lacks values fails before any write. API errors such as
+server_not_confirmed_stopped are surfaced as-is.
 `
 
 // Options configures process dependencies. Zero values use the real process.
@@ -102,6 +114,10 @@ func Run(args []string, opts Options) int {
 		return runner.selectSetup(args[1:])
 	case "unload-setup":
 		return runner.unloadSetup(args[1:])
+	case "config":
+		return runner.config(args[1:])
+	case "schema", "management-schema":
+		return runner.schema(args[1:])
 	case "auth":
 		return runner.auth(args[1:])
 	default:

@@ -122,3 +122,90 @@ func TestListSelectUnloadSetupsHTTP(t *testing.T) {
 		t.Fatalf("unload %s %s key=%q body=%s", gotMethod, gotPath, gotKey, gotBody)
 	}
 }
+
+func TestConfigurationAndSchemaHTTP(t *testing.T) {
+	var gotMethod, gotPath, gotAuth, gotKey, gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAuth, gotKey, gotBody = r.Header.Get("Authorization"), r.Header.Get("Idempotency-Key"), string(payload)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","name":"Main","gameID":"factorio","gameName":"Factorio","serverID":"srv-1","serverName":"Alpha","selected":true,"version":"v1","values":{"name":"Alpha"},"editable":true,"updatedAt":"2026-01-02T03:04:05Z","createdAt":"2026-01-01T00:00:00Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"setup-a","version":"v1","values":{"name":"Beta"},"editable":true,"updatedAt":"2026-01-02T04:00:00Z","secrets":{"version":"s1","configured":true,"pending":false}}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/games/factorio/management-schema":
+			_, _ = io.WriteString(w, `{"gameID":"factorio","configuration":{"sections":[{"id":"broadcast"}]}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "tok")
+	ctx := context.Background()
+
+	configuration, err := client.GetConfiguration(ctx, "srv-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configuration.SetupID != "setup-a" || configuration.Version != "v1" || configuration.GameID != "factorio" {
+		t.Fatalf("configuration %+v", configuration)
+	}
+	if gotMethod != http.MethodGet || gotAuth != "Bearer tok" || gotKey != "" {
+		t.Fatalf("get meta %s %s key=%q", gotMethod, gotAuth, gotKey)
+	}
+
+	body := map[string]any{
+		"expectedSetupID":   "setup-a",
+		"expectedUpdatedAt": "2026-01-02T03:04:05Z",
+		"version":           "v1",
+		"values":            map[string]any{"name": "Beta"},
+	}
+	updated, err := client.PutConfiguration(ctx, "srv-1", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(updated.Values) != `{"name":"Beta"}` {
+		t.Fatalf("updated values %s", updated.Values)
+	}
+	if gotMethod != http.MethodPut || gotKey != "" || !strings.Contains(gotBody, `"expectedSetupID":"setup-a"`) || !strings.Contains(gotBody, `"values"`) {
+		t.Fatalf("put %s key=%q body=%s", gotMethod, gotKey, gotBody)
+	}
+
+	schema, err := client.GetManagementSchema(ctx, "factorio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(schema), `"gameID":"factorio"`) {
+		t.Fatalf("schema %s", schema)
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/v1/games/factorio/management-schema" || gotKey != "" {
+		t.Fatalf("schema meta %s %s key=%q", gotMethod, gotPath, gotKey)
+	}
+}
+
+func TestPutConfigurationSurfacesAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":{"code":"server_not_confirmed_stopped","message":"the Server must be confirmed stopped before changing configuration"}}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "tok")
+	_, err := client.PutConfiguration(context.Background(), "srv-1", map[string]any{
+		"expectedSetupID":   "setup-a",
+		"expectedUpdatedAt": "2026-01-02T03:04:05Z",
+		"version":           "v1",
+		"values":            map[string]any{"name": "Beta"},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.Code != "server_not_confirmed_stopped" {
+		t.Fatalf("err %#v", err)
+	}
+}
