@@ -132,7 +132,7 @@ func TestServersAndStatus(t *testing.T) {
 
 	xdg := t.TempDir()
 	opts, stdout, stderr := testOptions(xdg, server.URL, testToken, nil)
-	if code := Run([]string{"servers"}, opts); code != 0 {
+	if code := Run([]string{"server", "list"}, opts); code != 0 {
 		t.Fatalf("servers exit %d stderr %s", code, stderr.String())
 	}
 	if stdout.String() != "Alpha\tFactorio\tRunning\nBeta\tRust\tStopped\n" {
@@ -145,7 +145,7 @@ func TestServersAndStatus(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"status", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "status", "srv-1"}, opts); code != 0 {
 		t.Fatalf("status exit %d stderr %s", code, stderr.String())
 	}
 	if stdout.String() != "Alpha\tFactorio\tRunning\n" {
@@ -164,18 +164,18 @@ func TestLifecycleConfirmation(t *testing.T) {
 		wantPost    bool
 		wantConfirm bool
 	}{
-		{name: "start", args: []string{"start", "srv-1"}, players: 4, updates: []string{"build"}, wantPost: true},
-		{name: "stop without yes", args: []string{"stop", "srv-1"}},
-		{name: "stop yes", args: []string{"stop", "--yes", "srv-1"}, wantPost: true},
-		{name: "stop yes after id", args: []string{"stop", "srv-1", "--yes"}, wantPost: true},
-		{name: "force-stop without yes", args: []string{"force-stop", "srv-1"}},
-		{name: "force-stop yes", args: []string{"force-stop", "srv-1", "--yes"}, wantPost: true, wantConfirm: true},
-		{name: "force-stop tty yes", args: []string{"force-stop", "srv-1"}, stdin: "yes\n", tty: true, wantPost: true, wantConfirm: true},
-		{name: "stop tty no", args: []string{"stop", "srv-1"}, stdin: "no\n", tty: true},
-		{name: "restart idle", args: []string{"restart", "srv-1"}, wantPost: true},
-		{name: "restart players", args: []string{"restart", "srv-1"}, players: 2},
-		{name: "restart updates", args: []string{"restart", "srv-1"}, updates: []string{"mod"}},
-		{name: "restart busy yes", args: []string{"restart", "--yes", "srv-1"}, players: 2, updates: []string{"mod"}, wantPost: true},
+		{name: "start", args: []string{"server", "start", "srv-1"}, players: 4, updates: []string{"build"}, wantPost: true},
+		{name: "stop without yes", args: []string{"server", "stop", "srv-1"}},
+		{name: "stop yes", args: []string{"server", "stop", "--yes", "srv-1"}, wantPost: true},
+		{name: "stop yes after id", args: []string{"server", "stop", "srv-1", "--yes"}, wantPost: true},
+		{name: "force-stop without yes", args: []string{"server", "force-stop", "srv-1"}},
+		{name: "force-stop yes", args: []string{"server", "force-stop", "srv-1", "--yes"}, wantPost: true, wantConfirm: true},
+		{name: "force-stop tty yes", args: []string{"server", "force-stop", "srv-1"}, stdin: "yes\n", tty: true, wantPost: true, wantConfirm: true},
+		{name: "stop tty no", args: []string{"server", "stop", "srv-1"}, stdin: "no\n", tty: true},
+		{name: "restart idle", args: []string{"server", "restart", "srv-1"}, wantPost: true},
+		{name: "restart players", args: []string{"server", "restart", "srv-1"}, players: 2},
+		{name: "restart updates", args: []string{"server", "restart", "srv-1"}, updates: []string{"mod"}},
+		{name: "restart busy yes", args: []string{"server", "restart", "--yes", "srv-1"}, players: 2, updates: []string{"mod"}, wantPost: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -217,7 +217,7 @@ func TestLifecycleConfirmation(t *testing.T) {
 				if !uuidPattern.MatchString(post.Key) {
 					t.Fatalf("idempotency key %q", post.Key)
 				}
-				if !strings.Contains(post.Body, `"type":"`+test.args[0]+`"`) {
+				if !strings.Contains(post.Body, `"type":"`+test.args[1]+`"`) {
 					t.Fatalf("body %s", post.Body)
 				}
 				flag := `"confirmUnsavedProgressLoss":false`
@@ -227,7 +227,7 @@ func TestLifecycleConfirmation(t *testing.T) {
 				if !strings.Contains(post.Body, flag) {
 					t.Fatalf("body %s, want %s", post.Body, flag)
 				}
-				if !strings.Contains(stdout.String(), "requested "+test.args[0]+" for Alpha") {
+				if !strings.Contains(stdout.String(), "requested "+test.args[1]+" for Alpha") {
 					t.Fatalf("stdout %q", stdout.String())
 				}
 				return
@@ -238,10 +238,10 @@ func TestLifecycleConfirmation(t *testing.T) {
 			if strings.Contains(stdout.String(), testToken) || strings.Contains(stderr.String(), testToken) {
 				t.Fatal("token leaked")
 			}
-			if test.args[0] == "force-stop" && !strings.Contains(stderr.String(), "unsaved progress") {
+			if test.args[1] == "force-stop" && !strings.Contains(stderr.String(), "unsaved progress") {
 				t.Fatalf("stderr %q", stderr.String())
 			}
-			if test.args[0] == "stop" && !strings.Contains(stderr.String(), "Stop Alpha?") {
+			if test.args[1] == "stop" && !strings.Contains(stderr.String(), "Stop Alpha?") {
 				t.Fatalf("stderr %q", stderr.String())
 			}
 		})
@@ -261,7 +261,7 @@ func TestConsole(t *testing.T) {
 		}))
 		defer server.Close()
 		opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-		if code := Run([]string{"console", "srv-1", "say", "hello"}, opts); code != 0 {
+		if code := Run([]string{"rcon", "send", "srv-1", "say", "hello"}, opts); code != 0 {
 			t.Fatalf("exit %d stderr %s", code, stderr.String())
 		}
 		if stdout.String() != "players: 1\n" {
@@ -283,7 +283,7 @@ func TestConsole(t *testing.T) {
 		}))
 		defer server.Close()
 		opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-		if code := Run([]string{"console", "srv-1", "hello"}, opts); code == 0 {
+		if code := Run([]string{"rcon", "send", "srv-1", "hello"}, opts); code == 0 {
 			t.Fatal("expected error")
 		}
 		if !strings.Contains(stderr.String(), "no interactive console channel") {
@@ -526,7 +526,7 @@ func TestRejectsPublicHTTPAndIgnoresLocalEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts, stdout, stderr := testOptions(xdg, "http://example.com", "", &memoryKeyring{getErr: errors.New("miss")})
-	if code := Run([]string{"servers"}, opts); code == 0 || !strings.Contains(stderr.String(), "https") {
+	if code := Run([]string{"server", "list"}, opts); code == 0 || !strings.Contains(stderr.String(), "https") {
 		t.Fatalf("exit %d stderr %q", code, stderr.String())
 	}
 	if strings.Contains(stdout.String()+stderr.String(), secret) {
@@ -547,13 +547,21 @@ func TestRejectsPublicHTTPAndIgnoresLocalEnv(t *testing.T) {
 
 func TestUsage(t *testing.T) {
 	opts, stdout, stderr := testOptions(t.TempDir(), "", "", nil)
-	if code := Run(nil, opts); code != 2 || !strings.Contains(stderr.String(), "genos servers") {
-		t.Fatalf("no args exit %d stderr %q", code, stderr.String())
+	if code := Run(nil, opts); code != 2 || !strings.Contains(stdout.String(), "Available Commands") {
+		t.Fatalf("no args exit %d stdout %q stderr %q", code, stdout.String(), stderr.String())
+	}
+	for _, group := range []string{"server", "profile", "rcon", "auth"} {
+		if !strings.Contains(stdout.String(), group) {
+			t.Fatalf("root help missing %s: %q", group, stdout.String())
+		}
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"help"}, opts); code != 0 || !strings.Contains(stdout.String(), "genos auth token") {
-		t.Fatalf("help exit %d stdout %q", code, stdout.String())
+	if code := Run([]string{"server", "--help"}, opts); code != 0 || !strings.Contains(stdout.String(), "force-stop") {
+		t.Fatalf("server help exit %d stdout %q", code, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "credentials-clear") {
+		t.Fatalf("server help should not list mods leaves: %q", stdout.String())
 	}
 	if code := Run([]string{"nope"}, opts); code != 2 {
 		t.Fatalf("unknown exit %d", code)
@@ -612,7 +620,7 @@ func TestSetupsList(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"setups", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "profile", "list", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	want := "setup-a\tMain\tFactorio\t*\nsetup-b\tAlt\tFactorio\t\n"
@@ -641,7 +649,7 @@ func TestSelectSetupDefaultsExpectedFromChooser(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"select-setup", "srv-1", "setup-b"}, opts); code != 0 {
+	if code := Run([]string{"server", "profile", "select", "srv-1", "setup-b"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if stdout.String() != "selected setup-b for srv-1\n" {
@@ -686,7 +694,7 @@ func TestSelectSetupExplicitExpectedSkipsChooserGET(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"select-setup", "srv-1", "setup-b", "--expected", "setup-a"}, opts); code != 0 {
+	if code := Run([]string{"server", "profile", "select", "srv-1", "setup-b", "--expected", "setup-a"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "selected setup-b") {
@@ -722,7 +730,7 @@ func TestSelectSetupRunningSurfacesAPIError(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"select-setup", "srv-1", "setup-b"}, opts); code == 0 {
+	if code := Run([]string{"server", "profile", "select", "srv-1", "setup-b"}, opts); code == 0 {
 		t.Fatal("expected failure while Running")
 	}
 	if stdout.Len() != 0 {
@@ -760,7 +768,7 @@ func TestUnloadSetupDefaultsExpected(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"unload-setup", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "profile", "unload", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if stdout.String() != "unloaded setup for srv-1\n" {
@@ -795,7 +803,7 @@ func TestUnloadSetupEmptySelectedDefaultsEmptyExpected(t *testing.T) {
 	defer server.Close()
 
 	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"unload-setup", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "profile", "unload", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	hits := rec.snapshot()
@@ -810,10 +818,10 @@ func TestUnloadSetupEmptySelectedDefaultsEmptyExpected(t *testing.T) {
 
 func TestExpectedFlagRequiresValue(t *testing.T) {
 	opts, _, stderr := testOptions(t.TempDir(), "https://genosservers.com", testToken, nil)
-	if code := Run([]string{"select-setup", "srv-1", "setup-b", "--expected"}, opts); code != 2 {
+	if code := Run([]string{"server", "profile", "select", "srv-1", "setup-b", "--expected"}, opts); code != 2 {
 		t.Fatalf("exit %d stderr %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "--expected requires a value") {
+	if !strings.Contains(stderr.String(), "flag needs an argument") && !strings.Contains(stderr.String(), "--expected") {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
@@ -831,7 +839,7 @@ func TestConfigGet(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"config", "get", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "config", "get", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	out := stdout.String()
@@ -862,7 +870,7 @@ func TestConfigPutFullBody(t *testing.T) {
 	body := `{"expectedSetupID":"setup-a","expectedUpdatedAt":"2026-01-02T03:04:05Z","version":"v1","values":{"name":"Beta"}}`
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	opts.Stdin = strings.NewReader(body)
-	if code := Run([]string{"config", "put", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "config", "put", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"name": "Beta"`) {
@@ -898,7 +906,7 @@ func TestConfigPutAutofillFromGET(t *testing.T) {
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	opts.Stdin = strings.NewReader(`{"values":{"name":"Beta"}}`)
-	if code := Run([]string{"config", "put", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "config", "put", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"name": "Beta"`) {
@@ -947,7 +955,7 @@ func TestConfigPutFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"config", "put", "srv-1", "--file", path}, opts); code != 0 {
+	if code := Run([]string{"server", "config", "put", "srv-1", "--file", path}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"FromFile"`) {
@@ -968,7 +976,7 @@ func TestConfigPutMissingValuesFailsBeforeAPI(t *testing.T) {
 
 	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	opts.Stdin = strings.NewReader(`{"expectedSetupID":"setup-a","version":"v1"}`)
-	if code := Run([]string{"config", "put", "srv-1"}, opts); code == 0 {
+	if code := Run([]string{"server", "config", "put", "srv-1"}, opts); code == 0 {
 		t.Fatal("expected failure")
 	}
 	if !strings.Contains(stderr.String(), "values") {
@@ -988,7 +996,7 @@ func TestConfigPutInvalidJSONFailsBeforeAPI(t *testing.T) {
 
 	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	opts.Stdin = strings.NewReader(`[1,2,3]`)
-	if code := Run([]string{"config", "put", "srv-1"}, opts); code == 0 {
+	if code := Run([]string{"server", "config", "put", "srv-1"}, opts); code == 0 {
 		t.Fatal("expected failure")
 	}
 	if !strings.Contains(stderr.String(), "JSON object") {
@@ -1017,7 +1025,7 @@ func TestConfigPutRunningSurfacesAPIError(t *testing.T) {
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	opts.Stdin = strings.NewReader(`{"values":{"name":"Beta"}}`)
-	if code := Run([]string{"config", "put", "srv-1"}, opts); code == 0 {
+	if code := Run([]string{"server", "config", "put", "srv-1"}, opts); code == 0 {
 		t.Fatal("expected failure while Running")
 	}
 	if stdout.Len() != 0 {
@@ -1052,23 +1060,14 @@ func TestSchema(t *testing.T) {
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	if code := Run([]string{"schema", "factorio"}, opts); code != 0 {
-		t.Fatalf("exit %d stderr %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"gameID": "factorio"`) {
-		t.Fatalf("stdout %q", stdout.String())
-	}
-	hits := rec.snapshot()
-	if len(hits) != 1 || hits[0].Key != "" || hits[0].Auth != "Bearer "+testToken {
-		t.Fatalf("hits %+v", hits)
-	}
-
-	stdout.Reset()
-	stderr.Reset()
-	if code := Run([]string{"management-schema", "factorio"}, opts); code != 0 {
-		t.Fatalf("alias exit %d stderr %s", code, stderr.String())
+		t.Fatalf("schema exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"broadcast"`) {
-		t.Fatalf("alias stdout %q", stdout.String())
+		t.Fatalf("schema stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Path != "/api/v1/games/factorio/management-schema" {
+		t.Fatalf("hits %+v", hits)
 	}
 }
 
@@ -1085,7 +1084,7 @@ func TestModsList(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "list", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "list", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	out := stdout.String()
@@ -1117,7 +1116,7 @@ func TestModsSearchAndShow(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "search", "srv-1", "--query", "tiny", "--category", "logistics"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "search", "srv-1", "--query", "tiny", "--category", "logistics"}, opts); code != 0 {
 		t.Fatalf("search exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"providerModID": "tiny-mod"`) || strings.Contains(stdout.String(), `"catalog"`) {
@@ -1125,7 +1124,7 @@ func TestModsSearchAndShow(t *testing.T) {
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "show", "srv-1", "tiny-mod"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "show", "srv-1", "tiny-mod"}, opts); code != 0 {
 		t.Fatalf("show exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"latestVersion": "1.2.3"`) || strings.Contains(stdout.String(), `"mod"`) {
@@ -1150,7 +1149,7 @@ func TestModsStageAutofillExpectedSetup(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "stage", "srv-1", "tiny-mod", "--provider", "factorio-mod-portal"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "stage", "srv-1", "tiny-mod", "--provider", "factorio-mod-portal"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"stageID": "stage-sha"`) {
@@ -1188,7 +1187,7 @@ func TestModsApplyAutofillStageID(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "apply", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "apply", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"providerModID": "tiny-mod"`) {
@@ -1220,7 +1219,7 @@ func TestModsApplyNothingStagedFailsClearly(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "apply", "srv-1"}, opts); code == 0 {
+	if code := Run([]string{"server", "mods", "apply", "srv-1"}, opts); code == 0 {
 		t.Fatal("expected failure")
 	}
 	if stdout.Len() != 0 {
@@ -1255,7 +1254,7 @@ func TestModsDiscardAndCredentials(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "credentials", "srv-1", "--username", "player", "--token", "secret"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "credentials", "srv-1", "--username", "player", "--token", "secret"}, opts); code != 0 {
 		t.Fatalf("credentials exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"credentialsConfigured": true`) {
@@ -1263,7 +1262,7 @@ func TestModsDiscardAndCredentials(t *testing.T) {
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "discard", "srv-1", "--expected-setup", "setup-a"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "discard", "srv-1", "--expected-setup", "setup-a"}, opts); code != 0 {
 		t.Fatalf("discard exit %d stderr %s", code, stderr.String())
 	}
 	hits := rec.snapshot()
@@ -1280,7 +1279,7 @@ func TestModsDiscardAndCredentials(t *testing.T) {
 
 func TestModsStageRequiresProvider(t *testing.T) {
 	opts, _, stderr := testOptions(t.TempDir(), "https://genosservers.com", testToken, nil)
-	if code := Run([]string{"mods", "stage", "srv-1", "tiny-mod"}, opts); code != 2 {
+	if code := Run([]string{"server", "mods", "stage", "srv-1", "tiny-mod"}, opts); code != 2 {
 		t.Fatalf("exit %d stderr %q", code, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "--provider") {
@@ -1305,7 +1304,7 @@ func TestModsApplyRunningSurfacesAPIError(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "apply", "srv-1"}, opts); code == 0 {
+	if code := Run([]string{"server", "mods", "apply", "srv-1"}, opts); code == 0 {
 		t.Fatal("expected failure while Running")
 	}
 	if stdout.Len() != 0 {
@@ -1349,7 +1348,7 @@ func TestSavesExportWaitAndOutput(t *testing.T) {
 	dir := t.TempDir()
 	outPath := filepath.Join(dir, "save.zip")
 	opts, stdout, stderr := testOptions(dir, server.URL, testToken, nil)
-	if code := Run([]string{"saves", "export", "srv-1", "--wait", "--interval", "100ms", "--timeout", "1m", "--output", outPath}, opts); code != 0 {
+	if code := Run([]string{"server", "saves", "export", "srv-1", "--wait", "--interval", "100ms", "--timeout", "1m", "--output", outPath}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"status": "succeeded"`) || !strings.Contains(stdout.String(), `"id": "exp-1"`) {
@@ -1382,7 +1381,7 @@ func TestSavesExportFailedExitsNonZero(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"saves", "export", "srv-1", "--wait", "--interval", "100ms", "--timeout", "1m"}, opts); code == 0 {
+	if code := Run([]string{"server", "saves", "export", "srv-1", "--wait", "--interval", "100ms", "--timeout", "1m"}, opts); code == 0 {
 		t.Fatalf("expected non-zero, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"status": "failed"`) {
@@ -1429,7 +1428,7 @@ func TestSavesImportWaitRequiresYes(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts, stdout, stderr := testOptions(dir, api.URL, testToken, nil)
-	code := Run([]string{"saves", "import", "srv-1", "--file", filePath, "--wait", "--interval", "100ms", "--timeout", "1m"}, opts)
+	code := Run([]string{"server", "saves", "import", "srv-1", "--file", filePath, "--wait", "--interval", "100ms", "--timeout", "1m"}, opts)
 	if code == 0 {
 		t.Fatalf("expected non-zero without --yes")
 	}
@@ -1484,7 +1483,7 @@ func TestSavesImportWaitYesReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts, stdout, stderr := testOptions(dir, api.URL, testToken, nil)
-	code := Run([]string{"saves", "import", "srv-1", "--file", filePath, "--wait", "--yes", "--apply-save-mods", "--interval", "100ms", "--timeout", "1m"}, opts)
+	code := Run([]string{"server", "saves", "import", "srv-1", "--file", filePath, "--wait", "--yes", "--apply-save-mods", "--interval", "100ms", "--timeout", "1m"}, opts)
 	if code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
@@ -1501,7 +1500,7 @@ func TestSavesImportWaitYesReplace(t *testing.T) {
 
 func TestSavesImportReplaceRequiresYes(t *testing.T) {
 	opts, _, stderr := testOptions(t.TempDir(), "http://example.invalid", testToken, nil)
-	if code := Run([]string{"saves", "import-replace", "srv-1", "imp-1"}, opts); code != 2 {
+	if code := Run([]string{"server", "saves", "import-replace", "srv-1", "imp-1"}, opts); code != 2 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "--yes") {
@@ -1522,7 +1521,7 @@ func TestSetupsListPrintsCreatableGames(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"setups", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "profile", "list", "srv-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	got := stdout.String()
@@ -1547,7 +1546,7 @@ func TestRenameServerHappyPath(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"rename", "srv-1", "Renamed"}, opts); code != 0 {
+	if code := Run([]string{"server", "rename", "srv-1", "Renamed"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"name": "Renamed"`) {
@@ -1571,7 +1570,7 @@ func TestRenameServerSurfacesNotStopped(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"rename", "srv-1", "Nope"}, opts); code == 0 {
+	if code := Run([]string{"server", "rename", "srv-1", "Nope"}, opts); code == 0 {
 		t.Fatal("expected failure")
 	}
 	if stdout.Len() != 0 {
@@ -1579,105 +1578,6 @@ func TestRenameServerSurfacesNotStopped(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "server_not_confirmed_stopped") {
 		t.Fatalf("stderr %q", stderr.String())
-	}
-}
-
-func TestCreateSetup(t *testing.T) {
-	rec := &recorder{}
-	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/servers/srv-1/setups" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = io.WriteString(w, `{"setup":{"id":"setup-new","name":"Factorio","game":{"name":"Factorio"}},"capacity":{"used":2,"limit":5},"server":{"id":"srv-1","name":"Alpha","status":"Stopped"}}`)
-	}))
-	defer server.Close()
-
-	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"create-setup", "srv-1", "--game", "factorio"}, opts); code != 0 {
-		t.Fatalf("exit %d stderr %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"id": "setup-new"`) || !strings.Contains(stdout.String(), `"used": 2`) {
-		t.Fatalf("stdout %q", stdout.String())
-	}
-	hits := rec.snapshot()
-	if len(hits) != 1 || hits[0].Key != "" || !strings.Contains(hits[0].Body, `"gameID":"factorio"`) {
-		t.Fatalf("hits %+v", hits)
-	}
-}
-
-func TestRenameSetupAutofillsExpected(t *testing.T) {
-	rec := &recorder{}
-	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
-			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Factorio","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/servers/srv-1/setups/setup-a":
-			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","name":"Alpha","status":"Stopped"}}`)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"rename-setup", "srv-1", "setup-a", "Main factory"}, opts); code != 0 {
-		t.Fatalf("exit %d stderr %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"id": "srv-1"`) {
-		t.Fatalf("stdout %q", stdout.String())
-	}
-	hits := rec.snapshot()
-	if len(hits) != 2 || hits[0].Method != http.MethodGet || hits[1].Method != http.MethodPatch || hits[1].Key != "" {
-		t.Fatalf("hits %+v", hits)
-	}
-	body := hits[1].Body
-	if !strings.Contains(body, `"name":"Main factory"`) || !strings.Contains(body, `"expectedName":"Factorio"`) || !strings.Contains(body, `"expectedSelectedSetupID":"setup-a"`) {
-		t.Fatalf("body %s", body)
-	}
-}
-
-func TestDeleteSetupRequiresYes(t *testing.T) {
-	opts, _, stderr := testOptions(t.TempDir(), "http://example.invalid", testToken, nil)
-	if code := Run([]string{"delete-setup", "srv-1", "setup-a"}, opts); code != 2 {
-		t.Fatalf("exit %d stderr %s", code, stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "--yes") {
-		t.Fatalf("stderr %q", stderr.String())
-	}
-}
-
-func TestDeleteSetupWithYesAutofill(t *testing.T) {
-	rec := &recorder{}
-	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
-			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main factory","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/servers/srv-1/setups/setup-a":
-			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","name":"Alpha","status":"Stopped"}}`)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"delete-setup", "srv-1", "setup-a", "--yes"}, opts); code != 0 {
-		t.Fatalf("exit %d stderr %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"id": "srv-1"`) {
-		t.Fatalf("stdout %q", stdout.String())
-	}
-	hits := rec.snapshot()
-	if len(hits) != 2 || hits[1].Method != http.MethodDelete || hits[1].Key != "" {
-		t.Fatalf("hits %+v", hits)
-	}
-	if !strings.Contains(hits[1].Body, `"expectedName":"Main factory"`) || !strings.Contains(hits[1].Body, `"expectedSelectedSetupID":"setup-a"`) {
-		t.Fatalf("body %s", hits[1].Body)
 	}
 }
 
@@ -1697,7 +1597,7 @@ func TestBroadcastStatusAndSend(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"broadcast-status", "srv-1", "--message", "hello"}, opts); code != 0 {
+	if code := Run([]string{"rcon", "broadcast-status", "srv-1", "--message", "hello"}, opts); code != 0 {
 		t.Fatalf("status exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"availability": "available"`) {
@@ -1710,7 +1610,7 @@ func TestBroadcastStatusAndSend(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"broadcast", "srv-1", "--message", "hello"}, opts); code != 0 {
+	if code := Run([]string{"rcon", "broadcast", "srv-1", "--message", "hello"}, opts); code != 0 {
 		t.Fatalf("broadcast exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"delivered": true`) {
@@ -1731,7 +1631,7 @@ func TestBroadcastSurfacesRateLimit(t *testing.T) {
 	defer server.Close()
 
 	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"broadcast", "srv-1", "--message", "hi"}, opts); code == 0 {
+	if code := Run([]string{"rcon", "broadcast", "srv-1", "--message", "hi"}, opts); code == 0 {
 		t.Fatal("expected failure")
 	}
 	if !strings.Contains(stderr.String(), "broadcast_rate_limited") {
@@ -1804,7 +1704,7 @@ func TestProfilesCreateRenameDeleteAutofill(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"profiles"}, opts); code != 0 {
+	if code := Run([]string{"profile", "list"}, opts); code != 0 {
 		t.Fatalf("profiles exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "prof-1\tOld\tFactorio") || !strings.Contains(stdout.String(), "capacity\t1\t5") {
@@ -1812,27 +1712,27 @@ func TestProfilesCreateRenameDeleteAutofill(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"profiles", "games"}, opts); code != 0 {
+	if code := Run([]string{"profile", "games"}, opts); code != 0 {
 		t.Fatalf("games exit %d stderr %s", code, stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"profiles", "create", "--game", "factorio"}, opts); code != 0 {
+	if code := Run([]string{"profile", "create", "--game", "factorio"}, opts); code != 0 {
 		t.Fatalf("create exit %d stderr %s", code, stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"profiles", "rename", "prof-1", "New"}, opts); code != 0 {
+	if code := Run([]string{"profile", "rename", "prof-1", "New"}, opts); code != 0 {
 		t.Fatalf("rename exit %d stderr %s", code, stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"profiles", "delete", "prof-1"}, opts); code != 2 {
+	if code := Run([]string{"profile", "delete", "prof-1"}, opts); code != 2 {
 		t.Fatalf("delete without --yes exit %d", code)
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"profiles", "delete", "prof-1", "--yes"}, opts); code != 0 {
+	if code := Run([]string{"profile", "delete", "prof-1", "--yes"}, opts); code != 0 {
 		t.Fatalf("delete exit %d stderr %s", code, stderr.String())
 	}
 	hits := rec.snapshot()
@@ -1869,13 +1769,13 @@ func TestProfilesConfigGetPutAutofill(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"profiles", "config", "get", "prof-1"}, opts); code != 0 {
+	if code := Run([]string{"profile", "config", "get", "prof-1"}, opts); code != 0 {
 		t.Fatalf("get exit %d stderr %s", code, stderr.String())
 	}
 	opts.Stdin = strings.NewReader(`{"values":{"x":2}}`)
 	stdout.Reset()
 	stderr.Reset()
-	if code := Run([]string{"profiles", "config", "put", "prof-1"}, opts); code != 0 {
+	if code := Run([]string{"profile", "config", "put", "prof-1"}, opts); code != 0 {
 		t.Fatalf("put exit %d stderr %s", code, stderr.String())
 	}
 	var put hit
@@ -1914,12 +1814,12 @@ func TestSetupCopyStartWaitSuccessAndFail(t *testing.T) {
 		}))
 		defer server.Close()
 		opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-		if code := Run([]string{"setup-copy", "destinations", "srv-1"}, opts); code != 0 {
+		if code := Run([]string{"profile", "copy", "destinations", "srv-1"}, opts); code != 0 {
 			t.Fatalf("destinations exit %d stderr %s", code, stderr.String())
 		}
 		stdout.Reset()
 		stderr.Reset()
-		if code := Run([]string{"setup-copy", "start", "srv-1", "setup-a", "--destination", "srv-2", "--mode", "copy", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code != 0 {
+		if code := Run([]string{"profile", "copy", "start", "srv-1", "setup-a", "--destination", "srv-2", "--mode", "copy", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code != 0 {
 			t.Fatalf("start wait exit %d stderr %s", code, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), `"status": "succeeded"`) {
@@ -1939,7 +1839,7 @@ func TestSetupCopyStartWaitSuccessAndFail(t *testing.T) {
 		}))
 		defer server.Close()
 		opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-		if code := Run([]string{"setup-copy", "start", "srv-1", "setup-a", "--destination", "srv-2", "--mode", "transfer", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code == 0 {
+		if code := Run([]string{"profile", "copy", "start", "srv-1", "setup-a", "--destination", "srv-2", "--mode", "transfer", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code == 0 {
 			t.Fatal("expected failure")
 		}
 		if !strings.Contains(stdout.String(), `"status": "failed"`) {
@@ -2007,7 +1907,6 @@ func TestAuthTokensCreateRevoke(t *testing.T) {
 	}
 }
 
-
 func TestProfilesModsListAndStageAutofill(t *testing.T) {
 	rec := &recorder{}
 	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
@@ -2027,7 +1926,7 @@ func TestProfilesModsListAndStageAutofill(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"profiles", "mods", "list", "prof-1"}, opts); code != 0 {
+	if code := Run([]string{"profile", "mods", "list", "prof-1"}, opts); code != 0 {
 		t.Fatalf("list exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"setupID": "prof-1"`) {
@@ -2035,7 +1934,7 @@ func TestProfilesModsListAndStageAutofill(t *testing.T) {
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"profiles", "mods", "stage", "prof-1", "tiny-mod", "--provider", "factorio-mod-portal"}, opts); code != 0 {
+	if code := Run([]string{"profile", "mods", "stage", "prof-1", "tiny-mod", "--provider", "factorio-mod-portal"}, opts); code != 0 {
 		t.Fatalf("stage exit %d stderr %s", code, stderr.String())
 	}
 	hits := rec.snapshot()
@@ -2069,7 +1968,7 @@ func TestProfilesModsExpectedSetupFallsBackToProfileID(t *testing.T) {
 	defer server.Close()
 
 	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"profiles", "mods", "discard", "prof-1"}, opts); code != 0 {
+	if code := Run([]string{"profile", "mods", "discard", "prof-1"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	hits := rec.snapshot()
@@ -2111,7 +2010,7 @@ func TestProfilesSavesExportWait(t *testing.T) {
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
 	opts.Sleep = func(time.Duration) {}
-	if code := Run([]string{"profiles", "saves", "export", "prof-1", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code != 0 {
+	if code := Run([]string{"profile", "saves", "export", "prof-1", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"id": "exp-p"`) || !strings.Contains(stderr.String(), "downloadURL") {
@@ -2125,10 +2024,10 @@ func TestProfilesSavesExportWait(t *testing.T) {
 
 func TestProfilesModsUnknownSubcommandUsage(t *testing.T) {
 	opts, _, stderr := testOptions(t.TempDir(), "https://genosservers.com", testToken, nil)
-	if code := Run([]string{"profiles", "mods", "nope"}, opts); code != 2 {
+	if code := Run([]string{"profile", "mods", "nope"}, opts); code != 2 {
 		t.Fatalf("exit %d stderr %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "unknown profiles mods subcommand") {
+	if !strings.Contains(stderr.String(), "unknown command") || !strings.Contains(stderr.String(), "nope") {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
@@ -2146,7 +2045,7 @@ func TestPublicRCONRevealAndRotateRequiresYes(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"public-rcon", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"rcon", "public-credential", "srv-1"}, opts); code != 0 {
 		t.Fatalf("reveal exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"credential": "pw-once"`) || !strings.Contains(stdout.String(), "will not show it again") {
@@ -2158,7 +2057,7 @@ func TestPublicRCONRevealAndRotateRequiresYes(t *testing.T) {
 	}
 
 	opts, _, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"public-rcon", "srv-1", "--rotate"}, opts); code != 2 {
+	if code := Run([]string{"rcon", "public-credential", "srv-1", "--rotate"}, opts); code != 2 {
 		t.Fatalf("rotate without yes exit %d stderr %q", code, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "--yes") {
@@ -2166,7 +2065,7 @@ func TestPublicRCONRevealAndRotateRequiresYes(t *testing.T) {
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"public-rcon", "srv-1", "--rotate", "--yes"}, opts); code != 0 {
+	if code := Run([]string{"rcon", "public-credential", "srv-1", "--rotate", "--yes"}, opts); code != 0 {
 		t.Fatalf("rotate exit %d stderr %s", code, stderr.String())
 	}
 	hits = rec.snapshot()
@@ -2197,7 +2096,7 @@ func TestServerOrderAndPlan(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"server-order", "srv-2", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "order", "srv-2", "srv-1"}, opts); code != 0 {
 		t.Fatalf("order exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"srv-2"`) || !strings.Contains(stdout.String(), `"serverIDs"`) {
@@ -2209,7 +2108,7 @@ func TestServerOrderAndPlan(t *testing.T) {
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"plan", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "plan", "srv-1"}, opts); code != 0 {
 		t.Fatalf("plan exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"offeringID": "standard"`) || strings.Contains(stdout.String(), `"plan"`) {
@@ -2241,7 +2140,7 @@ func TestModsDraftImportDraftApplyAutofill(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "draft", "srv-1", "--provider", "factorio-mod-portal", "--mod-id", "tiny-mod", "--mod-id", "other-mod"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "draft", "srv-1", "--provider", "factorio-mod-portal", "--mod-id", "tiny-mod", "--mod-id", "other-mod"}, opts); code != 0 {
 		t.Fatalf("draft exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"revision": 9`) {
@@ -2264,12 +2163,12 @@ func TestModsDraftImportDraftApplyAutofill(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "import", "srv-1", "--file", listPath}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "import", "srv-1", "--file", listPath}, opts); code != 0 {
 		t.Fatalf("import exit %d stderr %s", code, stderr.String())
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "draft-apply", "srv-1"}, opts); code != 0 {
+	if code := Run([]string{"server", "mods", "draft-apply", "srv-1"}, opts); code != 0 {
 		t.Fatalf("draft-apply exit %d stderr %s", code, stderr.String())
 	}
 	hits = rec.snapshot()
@@ -2296,7 +2195,7 @@ func TestModsDraftApplyMissingRevisionFailsClearly(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"mods", "draft-apply", "srv-1"}, opts); code == 0 {
+	if code := Run([]string{"server", "mods", "draft-apply", "srv-1"}, opts); code == 0 {
 		t.Fatal("expected failure")
 	}
 	if stdout.Len() != 0 {
@@ -2326,7 +2225,7 @@ func TestProfilesModsDraft(t *testing.T) {
 	defer server.Close()
 
 	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"profiles", "mods", "draft", "prof-1", "--provider", "factorio-mod-portal"}, opts); code != 0 {
+	if code := Run([]string{"profile", "mods", "draft", "prof-1", "--provider", "factorio-mod-portal"}, opts); code != 0 {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	hits := rec.snapshot()

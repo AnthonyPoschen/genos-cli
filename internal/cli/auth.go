@@ -13,41 +13,6 @@ import (
 	"github.com/AnthonyPoschen/genos-cli/internal/creds"
 )
 
-func (r *runner) auth(args []string) int {
-	if len(args) == 0 {
-		return r.usage("auth requires login, token, status, tokens, token-create, or token-revoke")
-	}
-	switch args[0] {
-	case "-h", "--help":
-		fmt.Fprint(r.out, usage)
-		return 0
-	case "login":
-		if len(args) != 1 {
-			return r.usage("auth login takes no arguments")
-		}
-		return r.login()
-	case "token":
-		if len(args) != 1 {
-			fmt.Fprintln(r.err, "genos: read the token from stdin; do not pass it as an argument")
-			return 2
-		}
-		return r.storeStdin()
-	case "status":
-		if len(args) != 1 {
-			return r.usage("auth status takes no arguments")
-		}
-		return r.authStatus()
-	case "tokens":
-		return r.authTokens(args[1:])
-	case "token-create":
-		return r.authTokenCreate(args[1:])
-	case "token-revoke":
-		return r.authTokenRevoke(args[1:])
-	default:
-		return r.usage("unknown auth command " + args[0])
-	}
-}
-
 func (r *runner) login() int {
 	origin, dir, err := r.origin()
 	if err != nil {
@@ -133,7 +98,7 @@ func (r *runner) authStatus() int {
 	if err != nil {
 		return r.fail(err)
 	}
-	resolved, err := creds.ResolveToken(r.getenv("GENOS_TOKEN"), r.keyring(), creds.File{
+	resolved, err := creds.ResolveToken(r.env.Token, r.keyring(), creds.File{
 		Path:   credentialPath(dir),
 		Origin: origin,
 	})
@@ -148,10 +113,6 @@ func (r *runner) authStatus() int {
 }
 
 func (r *runner) authTokens(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("auth tokens takes no arguments")
 	}
@@ -173,8 +134,7 @@ func (r *runner) authTokenCreate(args []string) int {
 		"--name": true, "--client-name": true, "--machine-name": true,
 	}, nil)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -204,8 +164,7 @@ func (r *runner) authTokenCreate(args []string) int {
 func (r *runner) authTokenRevoke(args []string) int {
 	rest, _, switches, err := splitControlFlagsWithSwitches(args, nil, map[string]bool{"--yes": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())

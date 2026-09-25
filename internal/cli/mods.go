@@ -20,8 +20,8 @@ type modsTarget struct {
 }
 
 var (
-	serverModsTarget  = modsTarget{kind: "servers", noun: "server", prefix: "mods"}
-	profileModsTarget = modsTarget{kind: "profiles", noun: "profile", prefix: "profiles mods"}
+	serverModsTarget  = modsTarget{kind: "servers", noun: "server", prefix: "server mods"}
+	profileModsTarget = modsTarget{kind: "profiles", noun: "profile", prefix: "profile mods"}
 )
 
 func (r *runner) mods(args []string) int {
@@ -61,19 +61,14 @@ func (r *runner) modsDispatch(target modsTarget, args []string) int {
 		return r.modsImport(target, args[1:])
 	case "draft-apply":
 		return r.modsDraftApply(target, args[1:])
-	case "-h", "--help", "help":
-		fmt.Fprint(r.out, usage)
-		return 0
+	case "-h", "--help":
+		return r.usage("")
 	default:
 		return r.usage(fmt.Sprintf("unknown %s subcommand %q", target.prefix, args[0]))
 	}
 }
 
 func (r *runner) modsList(target modsTarget, args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage(target.prefix + " list requires a " + target.noun + " id")
 	}
@@ -98,8 +93,7 @@ func (r *runner) modsSearch(target modsTarget, args []string) int {
 		"--query": true, "--category": true, "--sort": true, "--page": true, "--page-size": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -143,10 +137,6 @@ func (r *runner) modsSearch(target modsTarget, args []string) int {
 }
 
 func (r *runner) modsShow(target modsTarget, args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
 		return r.usage(target.prefix + " show requires a " + target.noun + " id and provider mod id")
 	}
@@ -174,8 +164,7 @@ func (r *runner) modsCredentials(target modsTarget, args []string) int {
 		"--username": true, "--token": true, "--expected-setup": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -211,8 +200,7 @@ func (r *runner) modsCredentials(target modsTarget, args []string) int {
 func (r *runner) modsCredentialsClear(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{"--expected-setup": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -245,8 +233,7 @@ func (r *runner) modsStage(target modsTarget, args []string) int {
 		"--provider": true, "--expected-setup": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -284,8 +271,7 @@ func (r *runner) modsStage(target modsTarget, args []string) int {
 func (r *runner) modsUnstage(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{"--expected-setup": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -316,8 +302,7 @@ func (r *runner) modsUnstage(target modsTarget, args []string) int {
 func (r *runner) modsDiscard(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{"--expected-setup": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -350,8 +335,7 @@ func (r *runner) modsApply(target modsTarget, args []string) int {
 		"--stage-id": true, "--expected-setup": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -489,8 +473,7 @@ func applyModFor(ctx context.Context, client *apiclient.Client, target modsTarge
 func (r *runner) modsDraft(target modsTarget, args []string) int {
 	rest, flags, modIDs, err := splitModsDraftFlags(args)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -530,8 +513,7 @@ func (r *runner) modsImport(target modsTarget, args []string) int {
 		"--file": true, "--expected-setup": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -572,8 +554,7 @@ func (r *runner) modsDraftApply(target modsTarget, args []string) int {
 		"--expected-setup": true, "--expected-revision": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -725,4 +706,3 @@ func splitModsFlags(args []string, valued map[string]bool) (rest []string, flags
 	}
 	return rest, flags, nil
 }
-

@@ -22,19 +22,14 @@ func (r *runner) config(args []string) int {
 		return r.configGet(args[1:])
 	case "put":
 		return r.configPut(args[1:])
-	case "-h", "--help", "help":
-		fmt.Fprint(r.out, usage)
-		return 0
+	case "-h", "--help":
+		return r.usage("")
 	default:
 		return r.usage(fmt.Sprintf("unknown config subcommand %q", args[0]))
 	}
 }
 
 func (r *runner) configGet(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("config get requires a server id")
 	}
@@ -57,8 +52,7 @@ func (r *runner) configGet(args []string) int {
 func (r *runner) configPut(args []string) int {
 	rest, filePath, err := splitFile(args)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -95,10 +89,6 @@ func (r *runner) configPut(args []string) int {
 }
 
 func (r *runner) schema(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("schema requires a game id")
 	}

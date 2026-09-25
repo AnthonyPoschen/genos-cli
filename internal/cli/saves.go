@@ -29,8 +29,8 @@ type savesTarget struct {
 }
 
 var (
-	serverSavesTarget  = savesTarget{kind: "servers", noun: "server", prefix: "saves"}
-	profileSavesTarget = savesTarget{kind: "profiles", noun: "profile", prefix: "profiles saves"}
+	serverSavesTarget  = savesTarget{kind: "servers", noun: "server", prefix: "server saves"}
+	profileSavesTarget = savesTarget{kind: "profiles", noun: "profile", prefix: "profile saves"}
 )
 
 func (r *runner) saves(args []string) int {
@@ -58,9 +58,8 @@ func (r *runner) savesDispatch(target savesTarget, args []string) int {
 		return r.savesImportValidate(target, args[1:])
 	case "import-replace":
 		return r.savesImportReplace(target, args[1:])
-	case "-h", "--help", "help":
-		fmt.Fprint(r.out, usage)
-		return 0
+	case "-h", "--help":
+		return r.usage("")
 	default:
 		return r.usage(fmt.Sprintf("unknown %s subcommand %q", target.prefix, args[0]))
 	}
@@ -71,8 +70,7 @@ func (r *runner) savesExport(target savesTarget, args []string) int {
 		"--interval": true, "--timeout": true, "--output": true,
 	}, map[string]bool{"--wait": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -129,10 +127,6 @@ func (r *runner) savesExport(target savesTarget, args []string) int {
 }
 
 func (r *runner) savesExportStatus(target savesTarget, args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
 		return r.usage(target.prefix + " export-status requires a " + target.noun + " id and export id")
 	}
@@ -166,8 +160,7 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 		"--wait": true, "--yes": true, "--apply-save-mods": true, "--no-apply-save-mods": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -282,10 +275,6 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 }
 
 func (r *runner) savesImportStatus(target savesTarget, args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
 		return r.usage(target.prefix + " import-status requires a " + target.noun + " id and import id")
 	}
@@ -313,10 +302,6 @@ func (r *runner) savesImportStatus(target savesTarget, args []string) int {
 }
 
 func (r *runner) savesImportValidate(target savesTarget, args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
 		return r.usage(target.prefix + " import-validate requires a " + target.noun + " id and import id")
 	}
@@ -344,8 +329,7 @@ func (r *runner) savesImportReplace(target savesTarget, args []string) int {
 		"--yes": true, "--apply-save-mods": true, "--no-apply-save-mods": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())

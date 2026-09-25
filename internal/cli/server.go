@@ -13,10 +13,6 @@ import (
 )
 
 func (r *runner) servers(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("servers takes no arguments")
 	}
@@ -60,8 +56,7 @@ func (r *runner) status(args []string) int {
 func (r *runner) action(action string, args []string) int {
 	rest, yes, err := splitYes(args)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -137,7 +132,7 @@ func (r *runner) api() (*apiclient.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := creds.ResolveToken(r.getenv("GENOS_TOKEN"), r.keyring(), creds.File{
+	resolved, err := creds.ResolveToken(r.env.Token, r.keyring(), creds.File{
 		Path:   credentialPath(dir),
 		Origin: origin,
 	})

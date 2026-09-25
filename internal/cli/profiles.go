@@ -32,19 +32,14 @@ func (r *runner) profiles(args []string) int {
 		return r.profilesMods(args[1:])
 	case "saves":
 		return r.profilesSaves(args[1:])
-	case "-h", "--help", "help":
-		fmt.Fprint(r.out, usage)
-		return 0
+	case "-h", "--help":
+		return r.usage("")
 	default:
 		return r.usage(fmt.Sprintf("unknown profiles subcommand %q", args[0]))
 	}
 }
 
 func (r *runner) profilesList(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("profiles list takes no arguments")
 	}
@@ -76,10 +71,6 @@ func (r *runner) profilesList(args []string) int {
 }
 
 func (r *runner) profilesGames(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("profiles games takes no arguments")
 	}
@@ -99,8 +90,7 @@ func (r *runner) profilesGames(args []string) int {
 func (r *runner) profilesCreate(args []string) int {
 	rest, flags, err := splitControlFlags(args, map[string]bool{"--game": true}, nil)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -128,8 +118,7 @@ func (r *runner) profilesCreate(args []string) int {
 func (r *runner) profilesRename(args []string) int {
 	rest, flags, err := splitControlFlags(args, map[string]bool{"--expected-name": true}, nil)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -166,8 +155,7 @@ func (r *runner) profilesDelete(args []string) int {
 		"--expected-name": true,
 	}, map[string]bool{"--yes": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -207,19 +195,14 @@ func (r *runner) profilesConfig(args []string) int {
 		return r.profilesConfigGet(args[1:])
 	case "put":
 		return r.profilesConfigPut(args[1:])
-	case "-h", "--help", "help":
-		fmt.Fprint(r.out, usage)
-		return 0
+	case "-h", "--help":
+		return r.usage("")
 	default:
 		return r.usage(fmt.Sprintf("unknown profiles config subcommand %q", args[0]))
 	}
 }
 
 func (r *runner) profilesConfigGet(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("profiles config get requires a profile id")
 	}
@@ -242,8 +225,7 @@ func (r *runner) profilesConfigGet(args []string) int {
 func (r *runner) profilesConfigPut(args []string) int {
 	rest, filePath, err := splitFile(args)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())

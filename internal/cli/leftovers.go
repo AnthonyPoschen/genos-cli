@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -13,8 +12,7 @@ func (r *runner) publicRCON(args []string) int {
 		"--rotate": true, "--yes": true,
 	})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -43,10 +41,6 @@ func (r *runner) publicRCON(args []string) int {
 }
 
 func (r *runner) serverOrder(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) == 0 {
 		return r.usage("server-order requires at least one server id (positional order is the new fleet order)")
 	}
@@ -72,10 +66,6 @@ func (r *runner) serverOrder(args []string) int {
 }
 
 func (r *runner) plan(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("plan requires a server id")
 	}
