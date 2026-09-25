@@ -1335,7 +1335,7 @@ func TestSavesExportWaitAndOutput(t *testing.T) {
 				_, _ = io.WriteString(w, `{"export":{"id":"exp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"running","progressPercent":40,"stage":"pack","requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
 				return
 			}
-			_, _ = io.WriteString(w, `{"export":{"id":"exp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"succeeded","progressPercent":100,"downloadURL":"`+ "http://"+r.Host+`/file.zip","archiveName":"save.zip","archiveBytes":9,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-1","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"succeeded","progressPercent":100,"downloadURL":"`+"http://"+r.Host+`/file.zip","archiveName":"save.zip","archiveBytes":9,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/file.zip":
 			downloadHits++
 			w.Header().Set("Content-Type", "application/zip")
@@ -1505,6 +1505,236 @@ func TestSavesImportReplaceRequiresYes(t *testing.T) {
 		t.Fatalf("exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "--yes") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestSetupsListPrintsCreatableGames(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/servers/srv-1/setups" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a","capacity":{"used":1,"limit":5},"creatableGames":[{"id":"factorio","name":"Factorio"},{"id":"rust","name":"Rust"}]}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"setups", "srv-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "setup-a\tMain\tFactorio\t*") {
+		t.Fatalf("stdout missing setup line: %q", got)
+	}
+	if !strings.Contains(got, "creatable\tfactorio\tFactorio\n") || !strings.Contains(got, "creatable\trust\tRust\n") {
+		t.Fatalf("stdout missing creatable lines: %q", got)
+	}
+}
+
+func TestRenameServerHappyPath(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/api/v1/servers/srv-1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"server":{"id":"srv-1","name":"Renamed","game":{"name":"Factorio"},"status":"Stopped"}}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"rename", "srv-1", "Renamed"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"name": "Renamed"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Method != http.MethodPatch || hits[0].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	if !strings.Contains(hits[0].Body, `"name":"Renamed"`) {
+		t.Fatalf("body %s", hits[0].Body)
+	}
+}
+
+func TestRenameServerSurfacesNotStopped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":{"code":"server_not_confirmed_stopped","message":"the Server must be confirmed stopped before changing its name"}}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"rename", "srv-1", "Nope"}, opts); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "server_not_confirmed_stopped") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestCreateSetup(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/servers/srv-1/setups" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"setup":{"id":"setup-new","name":"Factorio","game":{"name":"Factorio"}},"capacity":{"used":2,"limit":5},"server":{"id":"srv-1","name":"Alpha","status":"Stopped"}}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"create-setup", "srv-1", "--game", "factorio"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"id": "setup-new"`) || !strings.Contains(stdout.String(), `"used": 2`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Key != "" || !strings.Contains(hits[0].Body, `"gameID":"factorio"`) {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestRenameSetupAutofillsExpected(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Factorio","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/servers/srv-1/setups/setup-a":
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","name":"Alpha","status":"Stopped"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"rename-setup", "srv-1", "setup-a", "Main factory"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"id": "srv-1"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 || hits[0].Method != http.MethodGet || hits[1].Method != http.MethodPatch || hits[1].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	body := hits[1].Body
+	if !strings.Contains(body, `"name":"Main factory"`) || !strings.Contains(body, `"expectedName":"Factorio"`) || !strings.Contains(body, `"expectedSelectedSetupID":"setup-a"`) {
+		t.Fatalf("body %s", body)
+	}
+}
+
+func TestDeleteSetupRequiresYes(t *testing.T) {
+	opts, _, stderr := testOptions(t.TempDir(), "http://example.invalid", testToken, nil)
+	if code := Run([]string{"delete-setup", "srv-1", "setup-a"}, opts); code != 2 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--yes") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestDeleteSetupWithYesAutofill(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setups":
+			_, _ = io.WriteString(w, `{"setups":[{"id":"setup-a","name":"Main factory","game":{"name":"Factorio"}}],"selectedSetupID":"setup-a"}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/servers/srv-1/setups/setup-a":
+			_, _ = io.WriteString(w, `{"server":{"id":"srv-1","name":"Alpha","status":"Stopped"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"delete-setup", "srv-1", "setup-a", "--yes"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"id": "srv-1"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 2 || hits[1].Method != http.MethodDelete || hits[1].Key != "" {
+		t.Fatalf("hits %+v", hits)
+	}
+	if !strings.Contains(hits[1].Body, `"expectedName":"Main factory"`) || !strings.Contains(hits[1].Body, `"expectedSelectedSetupID":"setup-a"`) {
+		t.Fatalf("body %s", hits[1].Body)
+	}
+}
+
+func TestBroadcastStatusAndSend(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/broadcast":
+			_, _ = io.WriteString(w, `{"supported":true,"availability":"available","message":"hello","preview":"hello"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/broadcast":
+			_, _ = io.WriteString(w, `{"supported":true,"availability":"available","delivered":true,"message":"hello"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"broadcast-status", "srv-1", "--message", "hello"}, opts); code != 0 {
+		t.Fatalf("status exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"availability": "available"`) {
+		t.Fatalf("status stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Method != http.MethodGet || hits[0].Key != "" {
+		t.Fatalf("status hits %+v", hits)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"broadcast", "srv-1", "--message", "hello"}, opts); code != 0 {
+		t.Fatalf("broadcast exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"delivered": true`) {
+		t.Fatalf("broadcast stdout %q", stdout.String())
+	}
+	hits = rec.snapshot()
+	if len(hits) != 2 || hits[1].Method != http.MethodPost || hits[1].Key != "" || !strings.Contains(hits[1].Body, `"message":"hello"`) {
+		t.Fatalf("broadcast hits %+v", hits)
+	}
+}
+
+func TestBroadcastSurfacesRateLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, `{"error":{"code":"broadcast_rate_limited","message":"Wait a moment before sending another notice."}}`)
+	}))
+	defer server.Close()
+
+	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"broadcast", "srv-1", "--message", "hi"}, opts); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if !strings.Contains(stderr.String(), "broadcast_rate_limited") {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }

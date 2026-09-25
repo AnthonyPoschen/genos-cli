@@ -29,6 +29,12 @@ Usage:
   genos setups <serverID>
   genos select-setup <serverID> <setupID> [--expected <id>]
   genos unload-setup <serverID> [--expected <id>]
+  genos create-setup <serverID> --game <gameID>
+  genos rename-setup <serverID> <setupID> <name> [--expected-name <name>] [--expected <id>]
+  genos delete-setup <serverID> <setupID> --yes [--expected-name <name>] [--expected <id>]
+  genos rename <serverID> <name>
+  genos broadcast <serverID> [--message <text>]
+  genos broadcast-status <serverID> [--message <text>]
   genos config get <serverID>
   genos config put <serverID> [--file path]
   genos schema <gameID>
@@ -68,6 +74,16 @@ select-setup and unload-setup send expectedSelectedSetupID for compare-
 and-swap. When --expected is omitted, genos GETs setups first and uses
 selectedSetupID (empty string if none). When --expected is passed, its
 value is sent as-is (--expected requires a following value).
+
+create-setup POSTs a new profile with --game (use creatable game ids from
+genos setups). rename-setup and delete-setup send expectedName and
+expectedSelectedSetupID; when --expected-name / --expected are omitted,
+genos GETs setups first and uses that setup's name plus selectedSetupID.
+delete-setup requires --yes (destructive). rename PATCHes the server name
+(API requires confirmed Stopped). broadcast POSTs an in-game notice;
+broadcast-status GETs availability/preview. Mutation and broadcast commands
+print JSON. Managed files / archive-transfer are not released — use genos
+saves for save workflows; there is no files command.
 
 config put reads a JSON object from --file or stdin. Preferred path: the
 body already includes expectedSetupID, expectedUpdatedAt, version, and
@@ -159,6 +175,18 @@ func Run(args []string, opts Options) int {
 		return runner.selectSetup(args[1:])
 	case "unload-setup":
 		return runner.unloadSetup(args[1:])
+	case "create-setup":
+		return runner.createSetup(args[1:])
+	case "rename-setup":
+		return runner.renameSetup(args[1:])
+	case "delete-setup":
+		return runner.deleteSetup(args[1:])
+	case "rename":
+		return runner.rename(args[1:])
+	case "broadcast":
+		return runner.broadcast(args[1:])
+	case "broadcast-status":
+		return runner.broadcastStatus(args[1:])
 	case "config":
 		return runner.config(args[1:])
 	case "schema", "management-schema":

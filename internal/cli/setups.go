@@ -38,6 +38,9 @@ func (r *runner) setups(args []string) int {
 		}
 		fmt.Fprintf(r.out, "%s\t%s\t%s\t%s\n", oneLine(setup.ID), oneLine(setup.Name), oneLine(setup.Game.Name), mark)
 	}
+	for _, game := range chooser.CreatableGames {
+		fmt.Fprintf(r.out, "creatable\t%s\t%s\n", oneLine(game.ID), oneLine(game.Name))
+	}
 	return 0
 }
 
