@@ -18,6 +18,9 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos force-stop <serverID>` warns that unsaved progress will be lost unless `--yes`.
 - `genos restart <serverID>` asks when players are online or notable updates are pending, unless `--yes`.
 - `genos console <serverID> <text...>` sends one console command and prints the response.
+- `genos setups <serverID>` lists profiles (`id`, `name`, `game`) and marks the selected one with `*`.
+- `genos select-setup <serverID> <setupID> [--expected <id>]` selects a profile. Without `--expected`, GETs setups and uses `selectedSetupID`.
+- `genos unload-setup <serverID> [--expected <id>]` unloads the selected profile (same `--expected` default).
 - `genos auth status` shows the origin, whether the token came from `env`, `keyring`, or `file`, and a token prefix only.
 - `genos auth login` and `genos auth token` are for a human. Never pass a token as an argument.
 

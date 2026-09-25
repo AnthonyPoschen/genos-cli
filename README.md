@@ -50,6 +50,9 @@ genos stop <serverID> [--yes]
 genos force-stop <serverID> [--yes]
 genos restart <serverID> [--yes]
 genos console <serverID> <text...>
+genos setups <serverID>
+genos select-setup <serverID> <setupID> [--expected <id>]
+genos unload-setup <serverID> [--expected <id>]
 genos auth login
 genos auth token
 genos auth status
@@ -60,3 +63,7 @@ genos auth status
 `start` does not prompt. `stop` asks `Stop <name>?` unless `--yes`. `force-stop` asks for confirmation that mentions unsaved progress unless `--yes`, then tells the API that unsaved progress may be lost. `restart` asks when `playerCount` is greater than zero or `notableUpdates` is not empty, unless `--yes`. If a prompt is required, stdin is not a terminal, and `--yes` was not passed, genos exits without sending the action.
 
 `console` sends the text to the first runtime channel whose interaction is `interactive`, and prints the response.
+
+`setups` lists each profile for a server as `id`, `name`, `game`, and marks the selected one with `*`.
+
+`select-setup` and `unload-setup` change the selected profile (PUT/DELETE `/api/v1/servers/{id}/selected-setup`). They require the server to be confirmed Stopped on the API; a Running server surfaces the API error `server_not_confirmed_stopped` (no client-side fake success). Both send `expectedSelectedSetupID` for compare-and-swap. When `--expected` is omitted, genos GETs `/api/v1/servers/{id}/setups` first and uses that response's `selectedSetupID` (empty string if none). When `--expected` is passed, its value is sent as-is; the flag requires a following value.
