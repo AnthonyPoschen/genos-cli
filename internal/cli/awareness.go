@@ -2,15 +2,10 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
 func (r *runner) me(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("me takes no arguments")
 	}
@@ -28,10 +23,6 @@ func (r *runner) me(args []string) int {
 }
 
 func (r *runner) dashboard(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("dashboard takes no arguments")
 	}
@@ -49,10 +40,6 @@ func (r *runner) dashboard(args []string) int {
 }
 
 func (r *runner) catalog(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 0 {
 		return r.usage("catalog takes no arguments")
 	}

@@ -11,10 +11,6 @@ import (
 )
 
 func (r *runner) setups(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("setups requires a server id")
 	}
@@ -47,8 +43,7 @@ func (r *runner) setups(args []string) int {
 func (r *runner) selectSetup(args []string) int {
 	rest, expected, hasExpected, err := splitExpected(args)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -82,8 +77,7 @@ func (r *runner) selectSetup(args []string) int {
 func (r *runner) unloadSetup(args []string) int {
 	rest, expected, hasExpected, err := splitExpected(args)
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())

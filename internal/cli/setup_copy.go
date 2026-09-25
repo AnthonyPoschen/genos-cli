@@ -21,19 +21,14 @@ func (r *runner) setupCopy(args []string) int {
 		return r.setupCopyStart(args[1:])
 	case "status":
 		return r.setupCopyStatus(args[1:])
-	case "-h", "--help", "help":
-		fmt.Fprint(r.out, usage)
-		return 0
+	case "-h", "--help":
+		return r.usage("")
 	default:
 		return r.usage(fmt.Sprintf("unknown setup-copy subcommand %q", args[0]))
 	}
 }
 
 func (r *runner) setupCopyDestinations(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("setup-copy destinations requires a server id")
 	}
@@ -61,8 +56,7 @@ func (r *runner) setupCopyStart(args []string) int {
 		"--timeout":     true,
 	}, map[string]bool{"--wait": true})
 	if errors.Is(err, errHelp) {
-		fmt.Fprint(r.out, usage)
-		return 0
+		return r.usage("")
 	}
 	if err != nil {
 		return r.usage(err.Error())
@@ -119,10 +113,6 @@ func (r *runner) setupCopyStart(args []string) int {
 }
 
 func (r *runner) setupCopyStatus(args []string) int {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprint(r.out, usage)
-		return 0
-	}
 	if len(args) != 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
 		return r.usage("setup-copy status requires a server id and copy id")
 	}
