@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,44 +12,64 @@ import (
 	"github.com/AnthonyPoschen/genos-cli/internal/apiclient"
 )
 
+// modsTarget selects server vs library-profile mod routes.
+type modsTarget struct {
+	kind   string // apiclient owner kind: "servers" or "profiles"
+	noun   string // "server" or "profile" for usage text
+	prefix string // "mods" or "profiles mods"
+}
+
+var (
+	serverModsTarget  = modsTarget{kind: "servers", noun: "server", prefix: "mods"}
+	profileModsTarget = modsTarget{kind: "profiles", noun: "profile", prefix: "profiles mods"}
+)
+
 func (r *runner) mods(args []string) int {
+	return r.modsDispatch(serverModsTarget, args)
+}
+
+func (r *runner) profilesMods(args []string) int {
+	return r.modsDispatch(profileModsTarget, args)
+}
+
+func (r *runner) modsDispatch(target modsTarget, args []string) int {
 	if len(args) == 0 {
-		return r.usage("mods requires a subcommand")
+		return r.usage(target.prefix + " requires a subcommand")
 	}
 	switch args[0] {
 	case "list":
-		return r.modsList(args[1:])
+		return r.modsList(target, args[1:])
 	case "search":
-		return r.modsSearch(args[1:])
+		return r.modsSearch(target, args[1:])
 	case "show":
-		return r.modsShow(args[1:])
+		return r.modsShow(target, args[1:])
 	case "credentials":
-		return r.modsCredentials(args[1:])
+		return r.modsCredentials(target, args[1:])
 	case "credentials-clear":
-		return r.modsCredentialsClear(args[1:])
+		return r.modsCredentialsClear(target, args[1:])
 	case "stage":
-		return r.modsStage(args[1:])
+		return r.modsStage(target, args[1:])
 	case "unstage":
-		return r.modsUnstage(args[1:])
+		return r.modsUnstage(target, args[1:])
 	case "discard":
-		return r.modsDiscard(args[1:])
+		return r.modsDiscard(target, args[1:])
 	case "apply":
-		return r.modsApply(args[1:])
+		return r.modsApply(target, args[1:])
 	case "-h", "--help", "help":
 		fmt.Fprint(r.out, usage)
 		return 0
 	default:
-		return r.usage(fmt.Sprintf("unknown mods subcommand %q", args[0]))
+		return r.usage(fmt.Sprintf("unknown %s subcommand %q", target.prefix, args[0]))
 	}
 }
 
-func (r *runner) modsList(args []string) int {
+func (r *runner) modsList(target modsTarget, args []string) int {
 	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
 		fmt.Fprint(r.out, usage)
 		return 0
 	}
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		return r.usage("mods list requires a server id")
+		return r.usage(target.prefix + " list requires a " + target.noun + " id")
 	}
 	if err := validateID(args[0]); err != nil {
 		return r.fail(err)
@@ -59,14 +80,14 @@ func (r *runner) modsList(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	state, err := client.GetMods(ctx, args[0])
+	state, err := getModsFor(ctx, client, target, args[0])
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func (r *runner) modsSearch(args []string) int {
+func (r *runner) modsSearch(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{
 		"--query": true, "--category": true, "--sort": true, "--page": true, "--page-size": true,
 	})
@@ -78,7 +99,7 @@ func (r *runner) modsSearch(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 1 {
-		return r.usage("mods search requires a server id")
+		return r.usage(target.prefix + " search requires a " + target.noun + " id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
@@ -108,26 +129,26 @@ func (r *runner) modsSearch(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	catalog, err := client.SearchModCatalog(ctx, rest[0], query)
+	catalog, err := searchModsFor(ctx, client, target, rest[0], query)
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printRawJSON(catalog)
 }
 
-func (r *runner) modsShow(args []string) int {
+func (r *runner) modsShow(target modsTarget, args []string) int {
 	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
 		fmt.Fprint(r.out, usage)
 		return 0
 	}
 	if len(args) != 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
-		return r.usage("mods show requires a server id and provider mod id")
+		return r.usage(target.prefix + " show requires a " + target.noun + " id and provider mod id")
 	}
 	if err := validateID(args[0]); err != nil {
 		return r.fail(err)
 	}
 	if strings.TrimSpace(args[1]) == "" {
-		return r.usage("mods show requires a provider mod id")
+		return r.usage(target.prefix + " show requires a provider mod id")
 	}
 	client, err := r.api()
 	if err != nil {
@@ -135,14 +156,14 @@ func (r *runner) modsShow(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	detail, err := client.InspectModCatalog(ctx, args[0], args[1])
+	detail, err := inspectModsFor(ctx, client, target, args[0], args[1])
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printRawJSON(detail)
 }
 
-func (r *runner) modsCredentials(args []string) int {
+func (r *runner) modsCredentials(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{
 		"--username": true, "--token": true, "--expected-setup": true,
 	})
@@ -154,7 +175,7 @@ func (r *runner) modsCredentials(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 1 {
-		return r.usage("mods credentials requires a server id")
+		return r.usage(target.prefix + " credentials requires a " + target.noun + " id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
@@ -162,7 +183,7 @@ func (r *runner) modsCredentials(args []string) int {
 	username, okUser := flags["--username"]
 	token, okToken := flags["--token"]
 	if !okUser || strings.TrimSpace(username) == "" || !okToken || strings.TrimSpace(token) == "" {
-		return r.usage("mods credentials requires --username and --token")
+		return r.usage(target.prefix + " credentials requires --username and --token")
 	}
 	client, err := r.api()
 	if err != nil {
@@ -170,18 +191,18 @@ func (r *runner) modsCredentials(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	expected, err := resolveExpectedSetup(ctx, client, rest[0], flags)
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
 	if err != nil {
 		return r.fail(err)
 	}
-	state, err := client.SetModCredentials(ctx, rest[0], expected, username, token)
+	state, err := setModCredentialsFor(ctx, client, target, rest[0], expected, username, token)
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func (r *runner) modsCredentialsClear(args []string) int {
+func (r *runner) modsCredentialsClear(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{"--expected-setup": true})
 	if errors.Is(err, errHelp) {
 		fmt.Fprint(r.out, usage)
@@ -191,7 +212,7 @@ func (r *runner) modsCredentialsClear(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 1 {
-		return r.usage("mods credentials-clear requires a server id")
+		return r.usage(target.prefix + " credentials-clear requires a " + target.noun + " id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
@@ -202,18 +223,18 @@ func (r *runner) modsCredentialsClear(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	expected, err := resolveExpectedSetup(ctx, client, rest[0], flags)
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
 	if err != nil {
 		return r.fail(err)
 	}
-	state, err := client.ClearModCredentials(ctx, rest[0], expected)
+	state, err := clearModCredentialsFor(ctx, client, target, rest[0], expected)
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func (r *runner) modsStage(args []string) int {
+func (r *runner) modsStage(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{
 		"--provider": true, "--expected-setup": true,
 	})
@@ -225,17 +246,17 @@ func (r *runner) modsStage(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 2 {
-		return r.usage("mods stage requires a server id and provider mod id")
+		return r.usage(target.prefix + " stage requires a " + target.noun + " id and provider mod id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
 	}
 	if strings.TrimSpace(rest[1]) == "" {
-		return r.usage("mods stage requires a provider mod id")
+		return r.usage(target.prefix + " stage requires a provider mod id")
 	}
 	provider, ok := flags["--provider"]
 	if !ok || strings.TrimSpace(provider) == "" {
-		return r.usage("mods stage requires --provider (e.g. factorio-mod-portal or steam-workshop)")
+		return r.usage(target.prefix + " stage requires --provider (e.g. factorio-mod-portal or steam-workshop)")
 	}
 	client, err := r.api()
 	if err != nil {
@@ -243,18 +264,18 @@ func (r *runner) modsStage(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	expected, err := resolveExpectedSetup(ctx, client, rest[0], flags)
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
 	if err != nil {
 		return r.fail(err)
 	}
-	state, err := client.StageMod(ctx, rest[0], expected, provider, rest[1])
+	state, err := stageModFor(ctx, client, target, rest[0], expected, provider, rest[1])
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func (r *runner) modsUnstage(args []string) int {
+func (r *runner) modsUnstage(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{"--expected-setup": true})
 	if errors.Is(err, errHelp) {
 		fmt.Fprint(r.out, usage)
@@ -264,7 +285,7 @@ func (r *runner) modsUnstage(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 1 {
-		return r.usage("mods unstage requires a server id")
+		return r.usage(target.prefix + " unstage requires a " + target.noun + " id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
@@ -275,18 +296,18 @@ func (r *runner) modsUnstage(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	expected, err := resolveExpectedSetup(ctx, client, rest[0], flags)
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
 	if err != nil {
 		return r.fail(err)
 	}
-	state, err := client.UnstageMod(ctx, rest[0], expected)
+	state, err := unstageModFor(ctx, client, target, rest[0], expected)
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func (r *runner) modsDiscard(args []string) int {
+func (r *runner) modsDiscard(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{"--expected-setup": true})
 	if errors.Is(err, errHelp) {
 		fmt.Fprint(r.out, usage)
@@ -296,7 +317,7 @@ func (r *runner) modsDiscard(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 1 {
-		return r.usage("mods discard requires a server id")
+		return r.usage(target.prefix + " discard requires a " + target.noun + " id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
@@ -307,18 +328,18 @@ func (r *runner) modsDiscard(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	expected, err := resolveExpectedSetup(ctx, client, rest[0], flags)
+	expected, err := resolveExpectedSetup(ctx, client, target, rest[0], flags)
 	if err != nil {
 		return r.fail(err)
 	}
-	state, err := client.DiscardMod(ctx, rest[0], expected)
+	state, err := discardModFor(ctx, client, target, rest[0], expected)
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func (r *runner) modsApply(args []string) int {
+func (r *runner) modsApply(target modsTarget, args []string) int {
 	rest, flags, err := splitModsFlags(args, map[string]bool{
 		"--stage-id": true, "--expected-setup": true,
 	})
@@ -330,7 +351,7 @@ func (r *runner) modsApply(args []string) int {
 		return r.usage(err.Error())
 	}
 	if len(rest) != 1 {
-		return r.usage("mods apply requires a server id")
+		return r.usage(target.prefix + " apply requires a " + target.noun + " id")
 	}
 	if err := validateID(rest[0]); err != nil {
 		return r.fail(err)
@@ -345,12 +366,15 @@ func (r *runner) modsApply(args []string) int {
 	expected, hasExpected := flags["--expected-setup"]
 	stageID, hasStage := flags["--stage-id"]
 	if !hasExpected || !hasStage {
-		state, err := client.GetMods(ctx, rest[0])
+		state, err := getModsFor(ctx, client, target, rest[0])
 		if err != nil {
 			return r.fail(err)
 		}
 		if !hasExpected {
 			expected = state.SetupID
+			if strings.TrimSpace(expected) == "" && target.kind == "profiles" {
+				expected = rest[0]
+			}
 		}
 		if !hasStage {
 			if state.Staged == nil || strings.TrimSpace(state.Staged.StageID) == "" {
@@ -360,30 +384,100 @@ func (r *runner) modsApply(args []string) int {
 		}
 	}
 	if strings.TrimSpace(expected) == "" {
+		if target.kind == "profiles" {
+			return r.fail(errors.New("no setupID on mods state; pass --expected-setup (profile id)"))
+		}
 		return r.fail(errors.New("no setupID on mods state; select a setup first or pass --expected-setup"))
 	}
 	if strings.TrimSpace(stageID) == "" {
 		return r.fail(errors.New("no staged mod to apply; stage a mod first or pass --stage-id"))
 	}
-	state, err := client.ApplyMod(ctx, rest[0], expected, stageID)
+	state, err := applyModFor(ctx, client, target, rest[0], expected, stageID)
 	if err != nil {
 		return r.fail(err)
 	}
 	return r.printJSON(state)
 }
 
-func resolveExpectedSetup(ctx context.Context, client *apiclient.Client, serverID string, flags map[string]string) (string, error) {
+func resolveExpectedSetup(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID string, flags map[string]string) (string, error) {
 	if expected, ok := flags["--expected-setup"]; ok {
 		return expected, nil
 	}
-	state, err := client.GetMods(ctx, serverID)
+	state, err := getModsFor(ctx, client, target, ownerID)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(state.SetupID) == "" {
-		return "", errors.New("no setupID on mods state; select a setup first or pass --expected-setup")
+	if strings.TrimSpace(state.SetupID) != "" {
+		return state.SetupID, nil
 	}
-	return state.SetupID, nil
+	// On library profiles the setup id is the profile itself.
+	if target.kind == "profiles" {
+		return ownerID, nil
+	}
+	return "", errors.New("no setupID on mods state; select a setup first or pass --expected-setup")
+}
+
+func getModsFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.GetProfileMods(ctx, ownerID)
+	}
+	return client.GetMods(ctx, ownerID)
+}
+
+func searchModsFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID string, query apiclient.ModCatalogQuery) (json.RawMessage, error) {
+	if target.kind == "profiles" {
+		return client.SearchProfileModCatalog(ctx, ownerID, query)
+	}
+	return client.SearchModCatalog(ctx, ownerID, query)
+}
+
+func inspectModsFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, providerModID string) (json.RawMessage, error) {
+	if target.kind == "profiles" {
+		return client.InspectProfileModCatalog(ctx, ownerID, providerModID)
+	}
+	return client.InspectModCatalog(ctx, ownerID, providerModID)
+}
+
+func setModCredentialsFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected, username, token string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.SetProfileModCredentials(ctx, ownerID, expected, username, token)
+	}
+	return client.SetModCredentials(ctx, ownerID, expected, username, token)
+}
+
+func clearModCredentialsFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.ClearProfileModCredentials(ctx, ownerID, expected)
+	}
+	return client.ClearModCredentials(ctx, ownerID, expected)
+}
+
+func stageModFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected, provider, providerModID string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.StageProfileMod(ctx, ownerID, expected, provider, providerModID)
+	}
+	return client.StageMod(ctx, ownerID, expected, provider, providerModID)
+}
+
+func unstageModFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.UnstageProfileMod(ctx, ownerID, expected)
+	}
+	return client.UnstageMod(ctx, ownerID, expected)
+}
+
+func discardModFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.DiscardProfileMod(ctx, ownerID, expected)
+	}
+	return client.DiscardMod(ctx, ownerID, expected)
+}
+
+func applyModFor(ctx context.Context, client *apiclient.Client, target modsTarget, ownerID, expected, stageID string) (apiclient.SetupModState, error) {
+	if target.kind == "profiles" {
+		return client.ApplyProfileMod(ctx, ownerID, expected, stageID)
+	}
+	return client.ApplyMod(ctx, ownerID, expected, stageID)
 }
 
 // splitModsFlags parses known --flag value pairs. Boolean presence flags are not used.
@@ -415,3 +509,4 @@ func splitModsFlags(args []string, valued map[string]bool) (rest []string, flags
 	}
 	return rest, flags, nil
 }
+

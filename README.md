@@ -78,6 +78,8 @@ genos saves import <serverID> --file path.zip [--media-type application/zip] [--
 genos saves import-status <serverID> <importID>
 genos saves import-validate <serverID> <importID>
 genos saves import-replace <serverID> <importID> --yes [--apply-save-mods|--no-apply-save-mods]
+genos profiles mods list <profileID>
+genos profiles saves export <profileID> [--wait] …
 genos auth login
 genos auth token
 genos auth status
@@ -113,7 +115,7 @@ genos auth status
 
 ## Mods (server path)
 
-Server mod routes under `/api/v1/servers/{serverID}/mods` (profile `/api/v1/profiles/.../mods` mirrors are out of scope).
+Server mod routes under `/api/v1/servers/{serverID}/mods`. Library prep uses the same shapes under `/api/v1/profiles/{profileID}/mods` via `genos profiles mods …` (see below).
 
 | CLI | HTTP |
 | --- | --- |
@@ -131,11 +133,11 @@ Server mod routes under `/api/v1/servers/{serverID}/mods` (profile `/api/v1/prof
 
 List and mutating commands print the `mods` JSON object (pretty), same spirit as `config get`. Search/show print catalog JSON as returned. API errors (`server_not_confirmed_stopped`, `mod_provider_credentials_required`, `selected_setup_changed`, etc.) are surfaced as-is — never invent success. No `Idempotency-Key` (matches the dashboard).
 
-**Deferred follow-ups:** `mods draft-set` → `PUT …/mods/draft`, `mods draft-apply` → `POST …/mods/draft/apply`, `mods import` → `POST …/mods/import`, and profile-library mod route mirrors.
+**Deferred follow-ups:** `mods draft-set` → `PUT …/mods/draft`, `mods draft-apply` → `POST …/mods/draft/apply`, `mods import` → `POST …/mods/import`.
 
 ## Saves (server path)
 
-Server save export/import under `/api/v1/servers/{serverID}/save-exports` and `…/save-imports` (profile `/api/v1/profiles/…/save-*` mirrors are deferred).
+Server save export/import under `/api/v1/servers/{serverID}/save-exports` and `…/save-imports`. Library prep uses `genos profiles saves …` against `/api/v1/profiles/{profileID}/save-*`.
 
 | CLI | HTTP |
 | --- | --- |
@@ -150,4 +152,13 @@ Server save export/import under `/api/v1/servers/{serverID}/save-exports` and `�
 
 **Import:** create body `{fileName, mediaType, archiveBytes}` then PUT bytes to `uploadURL` with `Content-Type: application/zip` (no Genos bearer). Without `--wait`, stops after upload and prints import JSON. With `--wait`: validate → poll to `ready` → require `--yes` for replace (destructive); without `--yes`, print JSON + `import-replace --yes` hint and exit non-zero. With `--yes`: replace → poll to `succeeded|failed|expired` (default timeout `30m`). `--apply-save-mods` / `--no-apply-save-mods` set `applySaveMods` when the review requires a mod choice. `recovery` is shown on progress lines and in JSON. API errors pass through unchanged.
 
-**Deferred:** profile `/api/v1/profiles/{profileID}/save-exports` and `…/save-imports` mirrors.
+## Profiles mods/saves (library prep, P1.7)
+
+Prep a library profile the same way you prep a live server, then attach with `genos select-setup`.
+
+| CLI | HTTP |
+| --- | --- |
+| `genos profiles mods … <profileID> …` | `/api/v1/profiles/{profileID}/mods…` (same subcommands/flags as `genos mods`) |
+| `genos profiles saves … <profileID> …` | `/api/v1/profiles/{profileID}/save-exports` / `save-imports…` (same flags/poll/`--wait`/`--output` as `genos saves`) |
+
+On profiles, `--expected-setup` autofills from GET mods `setupID` (the profile id). Live-server targeting stays `genos mods|saves …`.

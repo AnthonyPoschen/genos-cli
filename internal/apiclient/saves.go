@@ -79,8 +79,8 @@ type SaveImport struct {
 	FinishedAt       *time.Time        `json:"finishedAt,omitempty"`
 }
 
-func savesPath(serverID, kind, id, action string) string {
-	base := "/api/v1/servers/" + url.PathEscape(serverID) + "/" + kind
+func savesPath(ownerKind, ownerID, kind, id, action string) string {
+	base := "/api/v1/" + ownerKind + "/" + url.PathEscape(ownerID) + "/" + kind
 	if id == "" {
 		return base
 	}
@@ -120,7 +120,16 @@ func decodeSaveImport(data []byte) (SaveImport, error) {
 // CreateSaveExport calls POST /api/v1/servers/{id}/save-exports.
 // Idempotency-Key is not sent (matches dashboard).
 func (c *Client) CreateSaveExport(ctx context.Context, serverID string) (SaveExport, error) {
-	data, status, err := c.do(ctx, http.MethodPost, savesPath(serverID, "save-exports", "", ""), nil, false)
+	return c.createSaveExport(ctx, ownerKindServers, serverID)
+}
+
+// CreateProfileSaveExport calls POST /api/v1/profiles/{id}/save-exports.
+func (c *Client) CreateProfileSaveExport(ctx context.Context, profileID string) (SaveExport, error) {
+	return c.createSaveExport(ctx, ownerKindProfiles, profileID)
+}
+
+func (c *Client) createSaveExport(ctx context.Context, ownerKind, ownerID string) (SaveExport, error) {
+	data, status, err := c.do(ctx, http.MethodPost, savesPath(ownerKind, ownerID, "save-exports", "", ""), nil, false)
 	if err != nil {
 		return SaveExport{}, err
 	}
@@ -132,7 +141,16 @@ func (c *Client) CreateSaveExport(ctx context.Context, serverID string) (SaveExp
 
 // GetSaveExport calls GET /api/v1/servers/{id}/save-exports/{exportID}.
 func (c *Client) GetSaveExport(ctx context.Context, serverID, exportID string) (SaveExport, error) {
-	data, status, err := c.do(ctx, http.MethodGet, savesPath(serverID, "save-exports", exportID, ""), nil, false)
+	return c.getSaveExport(ctx, ownerKindServers, serverID, exportID)
+}
+
+// GetProfileSaveExport calls GET /api/v1/profiles/{id}/save-exports/{exportID}.
+func (c *Client) GetProfileSaveExport(ctx context.Context, profileID, exportID string) (SaveExport, error) {
+	return c.getSaveExport(ctx, ownerKindProfiles, profileID, exportID)
+}
+
+func (c *Client) getSaveExport(ctx context.Context, ownerKind, ownerID, exportID string) (SaveExport, error) {
+	data, status, err := c.do(ctx, http.MethodGet, savesPath(ownerKind, ownerID, "save-exports", exportID, ""), nil, false)
 	if err != nil {
 		return SaveExport{}, err
 	}
@@ -160,6 +178,15 @@ func SaveExportFailed(status string) bool {
 // WaitSaveExport polls GetSaveExport until a terminal status, deadline, or ctx cancel.
 // sleep may be nil. report may be nil; when set it is called after every successful GET.
 func (c *Client) WaitSaveExport(ctx context.Context, serverID, exportID string, interval time.Duration, deadline time.Time, sleep func(time.Duration), report func(SaveExport)) (SaveExport, error) {
+	return c.waitSaveExport(ctx, ownerKindServers, serverID, exportID, interval, deadline, sleep, report)
+}
+
+// WaitProfileSaveExport polls GetProfileSaveExport until a terminal status, deadline, or ctx cancel.
+func (c *Client) WaitProfileSaveExport(ctx context.Context, profileID, exportID string, interval time.Duration, deadline time.Time, sleep func(time.Duration), report func(SaveExport)) (SaveExport, error) {
+	return c.waitSaveExport(ctx, ownerKindProfiles, profileID, exportID, interval, deadline, sleep, report)
+}
+
+func (c *Client) waitSaveExport(ctx context.Context, ownerKind, ownerID, exportID string, interval time.Duration, deadline time.Time, sleep func(time.Duration), report func(SaveExport)) (SaveExport, error) {
 	if sleep == nil {
 		sleep = time.Sleep
 	}
@@ -167,7 +194,7 @@ func (c *Client) WaitSaveExport(ctx context.Context, serverID, exportID string, 
 		interval = 2 * time.Second
 	}
 	for {
-		export, err := c.GetSaveExport(ctx, serverID, exportID)
+		export, err := c.getSaveExport(ctx, ownerKind, ownerID, exportID)
 		if err != nil {
 			return SaveExport{}, err
 		}
@@ -186,6 +213,15 @@ func (c *Client) WaitSaveExport(ctx context.Context, serverID, exportID string, 
 // CreateSaveImport calls POST /api/v1/servers/{id}/save-imports.
 // Idempotency-Key is not sent (matches dashboard).
 func (c *Client) CreateSaveImport(ctx context.Context, serverID, fileName, mediaType string, archiveBytes int64) (SaveImport, error) {
+	return c.createSaveImport(ctx, ownerKindServers, serverID, fileName, mediaType, archiveBytes)
+}
+
+// CreateProfileSaveImport calls POST /api/v1/profiles/{id}/save-imports.
+func (c *Client) CreateProfileSaveImport(ctx context.Context, profileID, fileName, mediaType string, archiveBytes int64) (SaveImport, error) {
+	return c.createSaveImport(ctx, ownerKindProfiles, profileID, fileName, mediaType, archiveBytes)
+}
+
+func (c *Client) createSaveImport(ctx context.Context, ownerKind, ownerID, fileName, mediaType string, archiveBytes int64) (SaveImport, error) {
 	body := struct {
 		FileName     string `json:"fileName"`
 		MediaType    string `json:"mediaType"`
@@ -195,7 +231,7 @@ func (c *Client) CreateSaveImport(ctx context.Context, serverID, fileName, media
 		MediaType:    mediaType,
 		ArchiveBytes: archiveBytes,
 	}
-	data, status, err := c.do(ctx, http.MethodPost, savesPath(serverID, "save-imports", "", ""), body, false)
+	data, status, err := c.do(ctx, http.MethodPost, savesPath(ownerKind, ownerID, "save-imports", "", ""), body, false)
 	if err != nil {
 		return SaveImport{}, err
 	}
@@ -207,7 +243,16 @@ func (c *Client) CreateSaveImport(ctx context.Context, serverID, fileName, media
 
 // GetSaveImport calls GET /api/v1/servers/{id}/save-imports/{importID}.
 func (c *Client) GetSaveImport(ctx context.Context, serverID, importID string) (SaveImport, error) {
-	data, status, err := c.do(ctx, http.MethodGet, savesPath(serverID, "save-imports", importID, ""), nil, false)
+	return c.getSaveImport(ctx, ownerKindServers, serverID, importID)
+}
+
+// GetProfileSaveImport calls GET /api/v1/profiles/{id}/save-imports/{importID}.
+func (c *Client) GetProfileSaveImport(ctx context.Context, profileID, importID string) (SaveImport, error) {
+	return c.getSaveImport(ctx, ownerKindProfiles, profileID, importID)
+}
+
+func (c *Client) getSaveImport(ctx context.Context, ownerKind, ownerID, importID string) (SaveImport, error) {
+	data, status, err := c.do(ctx, http.MethodGet, savesPath(ownerKind, ownerID, "save-imports", importID, ""), nil, false)
 	if err != nil {
 		return SaveImport{}, err
 	}
@@ -219,7 +264,16 @@ func (c *Client) GetSaveImport(ctx context.Context, serverID, importID string) (
 
 // ValidateSaveImport calls POST /api/v1/servers/{id}/save-imports/{importID}/validate.
 func (c *Client) ValidateSaveImport(ctx context.Context, serverID, importID string) (SaveImport, error) {
-	data, status, err := c.do(ctx, http.MethodPost, savesPath(serverID, "save-imports", importID, "validate"), nil, false)
+	return c.validateSaveImport(ctx, ownerKindServers, serverID, importID)
+}
+
+// ValidateProfileSaveImport calls POST /api/v1/profiles/{id}/save-imports/{importID}/validate.
+func (c *Client) ValidateProfileSaveImport(ctx context.Context, profileID, importID string) (SaveImport, error) {
+	return c.validateSaveImport(ctx, ownerKindProfiles, profileID, importID)
+}
+
+func (c *Client) validateSaveImport(ctx context.Context, ownerKind, ownerID, importID string) (SaveImport, error) {
+	data, status, err := c.do(ctx, http.MethodPost, savesPath(ownerKind, ownerID, "save-imports", importID, "validate"), nil, false)
 	if err != nil {
 		return SaveImport{}, err
 	}
@@ -232,11 +286,20 @@ func (c *Client) ValidateSaveImport(ctx context.Context, serverID, importID stri
 // ReplaceSaveImport calls POST /api/v1/servers/{id}/save-imports/{importID}/replace.
 // applySaveMods is omitted from the JSON body when nil.
 func (c *Client) ReplaceSaveImport(ctx context.Context, serverID, importID string, acknowledged bool, applySaveMods *bool) (SaveImport, error) {
+	return c.replaceSaveImport(ctx, ownerKindServers, serverID, importID, acknowledged, applySaveMods)
+}
+
+// ReplaceProfileSaveImport calls POST /api/v1/profiles/{id}/save-imports/{importID}/replace.
+func (c *Client) ReplaceProfileSaveImport(ctx context.Context, profileID, importID string, acknowledged bool, applySaveMods *bool) (SaveImport, error) {
+	return c.replaceSaveImport(ctx, ownerKindProfiles, profileID, importID, acknowledged, applySaveMods)
+}
+
+func (c *Client) replaceSaveImport(ctx context.Context, ownerKind, ownerID, importID string, acknowledged bool, applySaveMods *bool) (SaveImport, error) {
 	body := map[string]any{"acknowledged": acknowledged}
 	if applySaveMods != nil {
 		body["applySaveMods"] = *applySaveMods
 	}
-	data, status, err := c.do(ctx, http.MethodPost, savesPath(serverID, "save-imports", importID, "replace"), body, false)
+	data, status, err := c.do(ctx, http.MethodPost, savesPath(ownerKind, ownerID, "save-imports", importID, "replace"), body, false)
 	if err != nil {
 		return SaveImport{}, err
 	}
@@ -336,6 +399,15 @@ func SaveImportReviewOrFailed(status string) bool {
 
 // WaitSaveImport polls GetSaveImport until stop(status) is true, deadline, or ctx cancel.
 func (c *Client) WaitSaveImport(ctx context.Context, serverID, importID string, interval time.Duration, deadline time.Time, sleep func(time.Duration), stop func(string) bool, report func(SaveImport)) (SaveImport, error) {
+	return c.waitSaveImport(ctx, ownerKindServers, serverID, importID, interval, deadline, sleep, stop, report)
+}
+
+// WaitProfileSaveImport polls GetProfileSaveImport until stop(status) is true, deadline, or ctx cancel.
+func (c *Client) WaitProfileSaveImport(ctx context.Context, profileID, importID string, interval time.Duration, deadline time.Time, sleep func(time.Duration), stop func(string) bool, report func(SaveImport)) (SaveImport, error) {
+	return c.waitSaveImport(ctx, ownerKindProfiles, profileID, importID, interval, deadline, sleep, stop, report)
+}
+
+func (c *Client) waitSaveImport(ctx context.Context, ownerKind, ownerID, importID string, interval time.Duration, deadline time.Time, sleep func(time.Duration), stop func(string) bool, report func(SaveImport)) (SaveImport, error) {
 	if sleep == nil {
 		sleep = time.Sleep
 	}
@@ -346,7 +418,7 @@ func (c *Client) WaitSaveImport(ctx context.Context, serverID, importID string, 
 		stop = SaveImportTerminal
 	}
 	for {
-		replacement, err := c.GetSaveImport(ctx, serverID, importID)
+		replacement, err := c.getSaveImport(ctx, ownerKind, ownerID, importID)
 		if err != nil {
 			return SaveImport{}, err
 		}

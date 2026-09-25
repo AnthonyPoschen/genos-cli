@@ -2006,3 +2006,129 @@ func TestAuthTokensCreateRevoke(t *testing.T) {
 		t.Fatalf("create body %s", createBody)
 	}
 }
+
+
+func TestProfilesModsListAndStageAutofill(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/servers/") {
+			t.Fatalf("unexpected servers path %s", r.URL.Path)
+		}
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles/prof-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"prof-1","gameID":"factorio","editable":true,"credentialsConfigured":true}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/profiles/prof-1/mods/staged-selection":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"prof-1","gameID":"factorio","editable":true,"staged":{"providerID":"factorio-mod-portal","providerModID":"tiny-mod","stageID":"stage-sha"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"profiles", "mods", "list", "prof-1"}, opts); code != 0 {
+		t.Fatalf("list exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"setupID": "prof-1"`) {
+		t.Fatalf("list stdout %q", stdout.String())
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"profiles", "mods", "stage", "prof-1", "tiny-mod", "--provider", "factorio-mod-portal"}, opts); code != 0 {
+		t.Fatalf("stage exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var stage hit
+	for _, item := range hits {
+		if item.Method == http.MethodPut && item.Path == "/api/v1/profiles/prof-1/mods/staged-selection" {
+			stage = item
+		}
+	}
+	if stage.Method == "" || !strings.Contains(stage.Body, `"expectedSetupID":"prof-1"`) {
+		t.Fatalf("stage hit %+v from %+v", stage, hits)
+	}
+	if !strings.Contains(stdout.String(), `"stageID": "stage-sha"`) {
+		t.Fatalf("stage stdout %q", stdout.String())
+	}
+}
+
+func TestProfilesModsExpectedSetupFallsBackToProfileID(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles/prof-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"gameID":"factorio","editable":true}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/profiles/prof-1/mods/discard":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"prof-1","gameID":"factorio","editable":true}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"profiles", "mods", "discard", "prof-1"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var discard hit
+	for _, item := range hits {
+		if item.Method == http.MethodPost {
+			discard = item
+		}
+	}
+	if discard.Path != "/api/v1/profiles/prof-1/mods/discard" || !strings.Contains(discard.Body, `"expectedSetupID":"prof-1"`) {
+		t.Fatalf("discard %+v", discard)
+	}
+}
+
+func TestProfilesSavesExportWait(t *testing.T) {
+	rec := &recorder{}
+	var gets int
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/servers/") {
+			t.Fatalf("unexpected servers path %s", r.URL.Path)
+		}
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/profiles/prof-1/save-exports":
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-p","setupID":"prof-1","gameID":"factorio","status":"pending","progressPercent":0,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles/prof-1/save-exports/exp-p":
+			gets++
+			if gets < 2 {
+				_, _ = io.WriteString(w, `{"export":{"id":"exp-p","setupID":"prof-1","gameID":"factorio","status":"running","progressPercent":40,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"export":{"id":"exp-p","setupID":"prof-1","gameID":"factorio","status":"succeeded","progressPercent":100,"downloadURL":"https://files.example/p.zip","requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Sleep = func(time.Duration) {}
+	if code := Run([]string{"profiles", "saves", "export", "prof-1", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"id": "exp-p"`) || !strings.Contains(stderr.String(), "downloadURL") {
+		t.Fatalf("stdout %q stderr %q", stdout.String(), stderr.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) < 2 || hits[0].Path != "/api/v1/profiles/prof-1/save-exports" {
+		t.Fatalf("hits %+v", hits)
+	}
+}
+
+func TestProfilesModsUnknownSubcommandUsage(t *testing.T) {
+	opts, _, stderr := testOptions(t.TempDir(), "https://genosservers.com", testToken, nil)
+	if code := Run([]string{"profiles", "mods", "nope"}, opts); code != 2 {
+		t.Fatalf("exit %d stderr %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown profiles mods subcommand") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}

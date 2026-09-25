@@ -28,6 +28,10 @@ func (r *runner) profiles(args []string) int {
 		return r.profilesDelete(args[1:])
 	case "config":
 		return r.profilesConfig(args[1:])
+	case "mods":
+		return r.profilesMods(args[1:])
+	case "saves":
+		return r.profilesSaves(args[1:])
 	case "-h", "--help", "help":
 		fmt.Fprint(r.out, usage)
 		return 0
