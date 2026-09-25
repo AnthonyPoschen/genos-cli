@@ -15,7 +15,7 @@ import (
 
 func (r *runner) auth(args []string) int {
 	if len(args) == 0 {
-		return r.usage("auth requires login, token, or status")
+		return r.usage("auth requires login, token, status, tokens, token-create, or token-revoke")
 	}
 	switch args[0] {
 	case "-h", "--help":
@@ -37,6 +37,12 @@ func (r *runner) auth(args []string) int {
 			return r.usage("auth status takes no arguments")
 		}
 		return r.authStatus()
+	case "tokens":
+		return r.authTokens(args[1:])
+	case "token-create":
+		return r.authTokenCreate(args[1:])
+	case "token-revoke":
+		return r.authTokenRevoke(args[1:])
 	default:
 		return r.usage("unknown auth command " + args[0])
 	}
@@ -138,5 +144,90 @@ func (r *runner) authStatus() int {
 		return r.fail(err)
 	}
 	fmt.Fprintf(r.out, "origin: %s\nsource: %s\nprefix: %s\n", origin, resolved.Source, creds.Prefix(resolved.Token))
+	return 0
+}
+
+func (r *runner) authTokens(args []string) int {
+	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
+		fmt.Fprint(r.out, usage)
+		return 0
+	}
+	if len(args) != 0 {
+		return r.usage("auth tokens takes no arguments")
+	}
+	client, err := r.api()
+	if err != nil {
+		return r.fail(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	tokens, err := client.ListAccessTokens(ctx)
+	if err != nil {
+		return r.fail(err)
+	}
+	return r.printJSON(map[string]any{"tokens": tokens})
+}
+
+func (r *runner) authTokenCreate(args []string) int {
+	rest, flags, err := splitControlFlags(args, map[string]bool{
+		"--name": true, "--client-name": true, "--machine-name": true,
+	}, nil)
+	if errors.Is(err, errHelp) {
+		fmt.Fprint(r.out, usage)
+		return 0
+	}
+	if err != nil {
+		return r.usage(err.Error())
+	}
+	if len(rest) != 0 {
+		return r.usage("auth token-create takes no positional arguments")
+	}
+	client, err := r.api()
+	if err != nil {
+		return r.fail(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	result, err := client.CreateAccessToken(ctx, flags["--name"], flags["--client-name"], flags["--machine-name"])
+	if err != nil {
+		return r.fail(err)
+	}
+	// Print the full creation payload once on stdout (includes secret).
+	// Do not write the secret to stderr. Prefer storing via: genos auth token <secret.
+	if code := r.printJSON(result); code != 0 {
+		return code
+	}
+	fmt.Fprintln(r.err, "genos: secret printed once above; store with: genos auth token  (stdin)")
+	return 0
+}
+
+func (r *runner) authTokenRevoke(args []string) int {
+	rest, _, switches, err := splitControlFlagsWithSwitches(args, nil, map[string]bool{"--yes": true})
+	if errors.Is(err, errHelp) {
+		fmt.Fprint(r.out, usage)
+		return 0
+	}
+	if err != nil {
+		return r.usage(err.Error())
+	}
+	if len(rest) != 1 {
+		return r.usage("auth token-revoke requires a token id and --yes")
+	}
+	if !switches["--yes"] {
+		return r.usage("auth token-revoke requires --yes")
+	}
+	if err := validateID(rest[0]); err != nil {
+		return r.fail(fmt.Errorf("invalid token id %q", rest[0]))
+	}
+	client, err := r.api()
+	if err != nil {
+		return r.fail(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := client.RevokeAccessToken(ctx, rest[0]); err != nil {
+		return r.fail(err)
+	}
+	fmt.Fprintf(r.out, "revoked %s\n", rest[0])
 	return 0
 }

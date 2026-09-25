@@ -54,9 +54,26 @@ Usage:
   genos saves import-status <serverID> <importID>
   genos saves import-validate <serverID> <importID>
   genos saves import-replace <serverID> <importID> --yes [--apply-save-mods|--no-apply-save-mods]
+  genos me
+  genos dashboard
+  genos catalog
+  genos profiles
+  genos profiles list
+  genos profiles games
+  genos profiles create --game <gameID>
+  genos profiles rename <profileID> <name> [--expected-name <name>]
+  genos profiles delete <profileID> --yes [--expected-name <name>]
+  genos profiles config get <profileID>
+  genos profiles config put <profileID> [--file path]
+  genos setup-copy destinations <serverID>
+  genos setup-copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval 2s] [--timeout 15m]
+  genos setup-copy status <serverID> <copyID>
   genos auth login
   genos auth token
   genos auth status
+  genos auth tokens
+  genos auth token-create [--name N] [--client-name C] [--machine-name M]
+  genos auth token-revoke <tokenID> --yes
 
 The API origin is GENOS_HOST, otherwise currentHost in
 $XDG_CONFIG_HOME/genos/config.toml (default ~/.config/genos/config.toml).
@@ -111,6 +128,24 @@ succeeded|failed|expired (default interval 2s, timeout 15m; caps: interval
 goes to stdout. On success the downloadURL is printed to stderr; bytes are
 downloaded only when --output is set (never a silent large write). failed
 and expired exit non-zero after printing JSON.
+
+profiles lists the account library via dashboard profiles (there is no
+GET /profiles list route) and prints profileCapacity. profiles games lists
+creatable games. profiles create/rename/delete manage library profiles;
+rename/delete autofill expectedName from dashboard when --expected-name is
+omitted. delete requires --yes. Attaching a library profile to a running
+server is already genos select-setup <serverID> <setupID> (PUT selected-setup);
+there is no separate attach route. profiles config get/put mirror server
+config put autofill of concurrency fields from GET when omitted.
+
+setup-copy destinations/start/status cover setup copy/transfer between owned
+servers. --wait polls until succeeded|failed (same style as saves); never
+invent success; API errors pass through.
+
+auth tokens lists PAT metadata. auth token-create prints the plaintext secret
+once on stdout (never to stderr logs); store it with genos auth token on
+stdin. auth token-revoke requires --yes. Do not auto-ship billing money flows
+(plan-changes, reactivate, checkout, portal).
 
 saves import uploads a zip via the dashboard flow: create → PUT uploadURL
 (Content-Type application/zip, no Genos bearer) → optional validate/replace.
@@ -193,6 +228,16 @@ func Run(args []string, opts Options) int {
 		return runner.schema(args[1:])
 	case "mods":
 		return runner.mods(args[1:])
+	case "me":
+		return runner.me(args[1:])
+	case "dashboard":
+		return runner.dashboard(args[1:])
+	case "catalog":
+		return runner.catalog(args[1:])
+	case "profiles":
+		return runner.profiles(args[1:])
+	case "setup-copy":
+		return runner.setupCopy(args[1:])
 	case "saves":
 		return runner.saves(args[1:])
 	case "auth":
