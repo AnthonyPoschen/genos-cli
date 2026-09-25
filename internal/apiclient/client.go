@@ -997,3 +997,112 @@ func (c *Client) applyMod(ctx context.Context, ownerKind, ownerID, expectedSetup
 	return decodeModsPayload(data)
 }
 
+
+// DraftRevision returns collection.draft.revision when present and >= 1.
+func (s SetupModState) DraftRevision() (int64, bool) {
+	if len(s.Collection) == 0 || string(s.Collection) == "null" {
+		return 0, false
+	}
+	var collection struct {
+		Draft *struct {
+			Revision int64 `json:"revision"`
+		} `json:"draft"`
+	}
+	if err := json.Unmarshal(s.Collection, &collection); err != nil || collection.Draft == nil {
+		return 0, false
+	}
+	if collection.Draft.Revision < 1 {
+		return 0, false
+	}
+	return collection.Draft.Revision, true
+}
+
+// StageModDraft calls PUT /api/v1/servers/{id}/mods/draft.
+// directModIDs must be non-nil (empty list is allowed).
+func (c *Client) StageModDraft(ctx context.Context, serverID, expectedSetupID, providerID string, directModIDs []string) (SetupModState, error) {
+	return c.stageModDraft(ctx, ownerKindServers, serverID, expectedSetupID, providerID, directModIDs)
+}
+
+// StageProfileModDraft calls PUT /api/v1/profiles/{id}/mods/draft.
+func (c *Client) StageProfileModDraft(ctx context.Context, profileID, expectedSetupID, providerID string, directModIDs []string) (SetupModState, error) {
+	return c.stageModDraft(ctx, ownerKindProfiles, profileID, expectedSetupID, providerID, directModIDs)
+}
+
+func (c *Client) stageModDraft(ctx context.Context, ownerKind, ownerID, expectedSetupID, providerID string, directModIDs []string) (SetupModState, error) {
+	if directModIDs == nil {
+		directModIDs = []string{}
+	}
+	body := struct {
+		ExpectedSetupID string   `json:"expectedSetupID"`
+		ProviderID      string   `json:"providerID"`
+		DirectModIDs    []string `json:"directModIDs"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+		ProviderID:      providerID,
+		DirectModIDs:    directModIDs,
+	}
+	data, status, err := c.do(ctx, http.MethodPut, modsPath(ownerKind, ownerID, "/draft"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// ImportModList calls POST /api/v1/servers/{id}/mods/import.
+func (c *Client) ImportModList(ctx context.Context, serverID, expectedSetupID, content string) (SetupModState, error) {
+	return c.importModList(ctx, ownerKindServers, serverID, expectedSetupID, content)
+}
+
+// ImportProfileModList calls POST /api/v1/profiles/{id}/mods/import.
+func (c *Client) ImportProfileModList(ctx context.Context, profileID, expectedSetupID, content string) (SetupModState, error) {
+	return c.importModList(ctx, ownerKindProfiles, profileID, expectedSetupID, content)
+}
+
+func (c *Client) importModList(ctx context.Context, ownerKind, ownerID, expectedSetupID, content string) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID string `json:"expectedSetupID"`
+		Content         string `json:"content"`
+	}{
+		ExpectedSetupID: expectedSetupID,
+		Content:         content,
+	}
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(ownerKind, ownerID, "/import"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}
+
+// ApplyModDraft calls POST /api/v1/servers/{id}/mods/draft/apply.
+func (c *Client) ApplyModDraft(ctx context.Context, serverID, expectedSetupID string, expectedRevision int64) (SetupModState, error) {
+	return c.applyModDraft(ctx, ownerKindServers, serverID, expectedSetupID, expectedRevision)
+}
+
+// ApplyProfileModDraft calls POST /api/v1/profiles/{id}/mods/draft/apply.
+func (c *Client) ApplyProfileModDraft(ctx context.Context, profileID, expectedSetupID string, expectedRevision int64) (SetupModState, error) {
+	return c.applyModDraft(ctx, ownerKindProfiles, profileID, expectedSetupID, expectedRevision)
+}
+
+func (c *Client) applyModDraft(ctx context.Context, ownerKind, ownerID, expectedSetupID string, expectedRevision int64) (SetupModState, error) {
+	body := struct {
+		ExpectedSetupID  string `json:"expectedSetupID"`
+		ExpectedRevision int64  `json:"expectedRevision"`
+	}{
+		ExpectedSetupID:  expectedSetupID,
+		ExpectedRevision: expectedRevision,
+	}
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(ownerKind, ownerID, "/draft/apply"), body, false)
+	if err != nil {
+		return SetupModState{}, err
+	}
+	if status < 200 || status >= 300 {
+		return SetupModState{}, apiError(status, data)
+	}
+	return decodeModsPayload(data)
+}

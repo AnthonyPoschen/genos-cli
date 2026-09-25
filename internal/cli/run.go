@@ -48,6 +48,9 @@ Usage:
   genos mods unstage <serverID> [--expected-setup ID]
   genos mods discard <serverID> [--expected-setup ID]
   genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]
+  genos mods draft <serverID> --provider ID [--mod-id ID ...] [--expected-setup ID]
+  genos mods import <serverID> [--file path.json] [--expected-setup ID]
+  genos mods draft-apply <serverID> [--expected-setup ID] [--expected-revision N]
   genos saves export <serverID> [--wait] [--interval 2s] [--timeout 15m] [--output path]
   genos saves export-status <serverID> <exportID>
   genos saves import <serverID> --file path.zip [--media-type application/zip] [--wait] [--interval 2s] [--timeout 30m] [--apply-save-mods|--no-apply-save-mods] [--yes]
@@ -74,6 +77,9 @@ Usage:
   genos profiles mods unstage <profileID> [--expected-setup ID]
   genos profiles mods discard <profileID> [--expected-setup ID]
   genos profiles mods apply <profileID> [--stage-id ID] [--expected-setup ID]
+  genos profiles mods draft <profileID> --provider ID [--mod-id ID ...] [--expected-setup ID]
+  genos profiles mods import <profileID> [--file path.json] [--expected-setup ID]
+  genos profiles mods draft-apply <profileID> [--expected-setup ID] [--expected-revision N]
   genos profiles saves export <profileID> [--wait] [--interval 2s] [--timeout 15m] [--output path]
   genos profiles saves export-status <profileID> <exportID>
   genos profiles saves import <profileID> --file path.zip [--media-type application/zip] [--wait] [--interval 2s] [--timeout 30m] [--apply-save-mods|--no-apply-save-mods] [--yes]
@@ -83,6 +89,9 @@ Usage:
   genos setup-copy destinations <serverID>
   genos setup-copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval 2s] [--timeout 15m]
   genos setup-copy status <serverID> <copyID>
+  genos public-rcon <serverID> [--rotate --yes]
+  genos server-order <serverID> [<serverID>...]
+  genos plan <serverID>
   genos auth login
   genos auth token
   genos auth status
@@ -134,8 +143,10 @@ omitted (fails clearly if nothing is staged). mods stage requires
 --provider (examples: factorio-mod-portal, steam-workshop). API errors
 such as server_not_confirmed_stopped and mod_provider_credentials_required
 are surfaced as-is. Library prep uses genos profiles mods … (same flags;
-on profiles expectedSetupID is the profile id). draft-set, draft-apply, and
-import remain out of scope.
+on profiles expectedSetupID is the profile id). mods draft replaces the collection draft (--mod-id may repeat; omit for an empty
+directModIDs list). mods import reads mod-list.json from --file or stdin.
+mods draft-apply autofills expectedSetupID and expectedRevision from GET mods
+(collection.draft.revision) when omitted; fails clearly if no draft revision.
 
 saves export starts a server save export (POST …/save-exports). Without
 --wait it prints the export JSON immediately. With --wait it polls until
@@ -162,7 +173,10 @@ invent success; API errors pass through.
 
 auth tokens lists PAT metadata. auth token-create prints the plaintext secret
 once on stdout (never to stderr logs); store it with genos auth token on
-stdin. auth token-revoke requires --yes. Do not auto-ship billing money flows
+stdin. auth token-revoke requires --yes. public-rcon prints the password once (Genos will not show it again); --rotate
+requires --yes. server-order must list every owned server exactly once.
+plan is read-only (GET …/plan); do not invent plan-changes/reactivate/checkout/
+portal follow-ups. Do not auto-ship billing money flows
 (plan-changes, reactivate, checkout, portal).
 
 saves import uploads a zip via the dashboard flow: create → PUT uploadURL
@@ -258,6 +272,12 @@ func Run(args []string, opts Options) int {
 		return runner.setupCopy(args[1:])
 	case "saves":
 		return runner.saves(args[1:])
+	case "public-rcon":
+		return runner.publicRCON(args[1:])
+	case "server-order":
+		return runner.serverOrder(args[1:])
+	case "plan":
+		return runner.plan(args[1:])
 	case "auth":
 		return runner.auth(args[1:])
 	default:

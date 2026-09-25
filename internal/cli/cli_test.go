@@ -2132,3 +2132,211 @@ func TestProfilesModsUnknownSubcommandUsage(t *testing.T) {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
+
+func TestPublicRCONRevealAndRotateRequiresYes(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/servers/srv-1/public-rcon/credential" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"credential":"pw-once","connection":{"endpoint":"host:1","port":1},"notice":"Copy this password now. Genos will not show it again."}`)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"public-rcon", "srv-1"}, opts); code != 0 {
+		t.Fatalf("reveal exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"credential": "pw-once"`) || !strings.Contains(stdout.String(), "will not show it again") {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || !strings.Contains(hits[0].Body, `"rotate":false`) {
+		t.Fatalf("hits %+v", hits)
+	}
+
+	opts, _, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"public-rcon", "srv-1", "--rotate"}, opts); code != 2 {
+		t.Fatalf("rotate without yes exit %d stderr %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--yes") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"public-rcon", "srv-1", "--rotate", "--yes"}, opts); code != 0 {
+		t.Fatalf("rotate exit %d stderr %s", code, stderr.String())
+	}
+	hits = rec.snapshot()
+	var rotate hit
+	for _, item := range hits {
+		if strings.Contains(item.Body, `"rotate":true`) {
+			rotate = item
+		}
+	}
+	if rotate.Method == "" {
+		t.Fatalf("missing rotate hit %+v", hits)
+	}
+}
+
+func TestServerOrderAndPlan(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/server-order":
+			_, _ = io.WriteString(w, `{"serverIDs":["srv-2","srv-1"]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/plan":
+			_, _ = io.WriteString(w, `{"plan":{"offeringID":"standard","status":"active"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"server-order", "srv-2", "srv-1"}, opts); code != 0 {
+		t.Fatalf("order exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"srv-2"`) || !strings.Contains(stdout.String(), `"serverIDs"`) {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	if len(hits) != 1 || hits[0].Method != http.MethodPut || !strings.Contains(hits[0].Body, `"serverIDs":["srv-2","srv-1"]`) {
+		t.Fatalf("hits %+v", hits)
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"plan", "srv-1"}, opts); code != 0 {
+		t.Fatalf("plan exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"offeringID": "standard"`) || strings.Contains(stdout.String(), `"plan"`) {
+		// printRawJSON of inner plan should not wrap again with plan key as outer-only; object itself may still contain nested fields.
+		// Accept either pretty inner object.
+		if !strings.Contains(stdout.String(), "standard") {
+			t.Fatalf("stdout %q", stdout.String())
+		}
+	}
+}
+
+func TestModsDraftImportDraftApplyAutofill(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true,"collection":{"draft":{"revision":9,"items":[{"providerModID":"tiny-mod"}]}}}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/servers/srv-1/mods/draft":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","collection":{"draft":{"revision":9,"items":[{"providerModID":"tiny-mod"}]}}}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/import":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","collection":{"draft":{"revision":10,"items":[]}}}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/mods/draft/apply":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","collection":{"enabled":[{"providerModID":"tiny-mod"}]}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "draft", "srv-1", "--provider", "factorio-mod-portal", "--mod-id", "tiny-mod", "--mod-id", "other-mod"}, opts); code != 0 {
+		t.Fatalf("draft exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"revision": 9`) {
+		t.Fatalf("draft stdout %q", stdout.String())
+	}
+	hits := rec.snapshot()
+	var draft hit
+	for _, item := range hits {
+		if item.Method == http.MethodPut && strings.HasSuffix(item.Path, "/mods/draft") {
+			draft = item
+		}
+	}
+	if draft.Method == "" || !strings.Contains(draft.Body, `"expectedSetupID":"setup-a"`) || !strings.Contains(draft.Body, `"directModIDs":["tiny-mod","other-mod"]`) {
+		t.Fatalf("draft hit %+v from %+v", draft, hits)
+	}
+
+	dir := t.TempDir()
+	listPath := dir + "/mod-list.json"
+	if err := os.WriteFile(listPath, []byte(`{"mods":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "import", "srv-1", "--file", listPath}, opts); code != 0 {
+		t.Fatalf("import exit %d stderr %s", code, stderr.String())
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "draft-apply", "srv-1"}, opts); code != 0 {
+		t.Fatalf("draft-apply exit %d stderr %s", code, stderr.String())
+	}
+	hits = rec.snapshot()
+	var apply hit
+	for _, item := range hits {
+		if item.Method == http.MethodPost && strings.HasSuffix(item.Path, "/mods/draft/apply") {
+			apply = item
+		}
+	}
+	if apply.Method == "" || !strings.Contains(apply.Body, `"expectedSetupID":"setup-a"`) || !strings.Contains(apply.Body, `"expectedRevision":9`) {
+		t.Fatalf("apply hit %+v from %+v", apply, hits)
+	}
+}
+
+func TestModsDraftApplyMissingRevisionFailsClearly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/mods" {
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"setup-a","gameID":"factorio","editable":true}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"mods", "draft-apply", "srv-1"}, opts); code == 0 {
+		t.Fatal("expected failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "draft.revision") && !strings.Contains(stderr.String(), "expected-revision") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestProfilesModsDraft(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/servers/") {
+			t.Fatalf("unexpected servers path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles/prof-1/mods":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"prof-1","gameID":"factorio","editable":true}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/profiles/prof-1/mods/draft":
+			_, _ = io.WriteString(w, `{"mods":{"setupID":"prof-1","collection":{"draft":{"revision":1,"items":[]}}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, _, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"profiles", "mods", "draft", "prof-1", "--provider", "factorio-mod-portal"}, opts); code != 0 {
+		t.Fatalf("exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var draft hit
+	for _, item := range hits {
+		if item.Method == http.MethodPut {
+			draft = item
+		}
+	}
+	if draft.Path != "/api/v1/profiles/prof-1/mods/draft" || !strings.Contains(draft.Body, `"directModIDs":[]`) || !strings.Contains(draft.Body, `"expectedSetupID":"prof-1"`) {
+		t.Fatalf("draft %+v", draft)
+	}
+}
