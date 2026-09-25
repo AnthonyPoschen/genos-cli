@@ -53,27 +53,82 @@ func TestValidateOrigin(t *testing.T) {
 
 func TestResolveOrigin(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	body := "# comment\ncurrentHost = \"https://genosservers.com\"\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	configWithHost := filepath.Join(dir, "with-host.toml")
+	if err := os.WriteFile(configWithHost, []byte("# comment\ncurrentHost = \"https://staging.example.com\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got, err := ResolveOrigin("", path)
-	if err != nil {
+	configEmpty := filepath.Join(dir, "empty.toml")
+	if err := os.WriteFile(configEmpty, []byte("# no currentHost\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got != "https://genosservers.com" {
-		t.Fatalf("config origin = %q", got)
+	missingPath := filepath.Join(dir, "missing.toml")
+
+	tests := []struct {
+		name       string
+		hostEnv    string
+		configPath string
+		want       string
+		wantErr    string
+	}{
+		{
+			name:       "default when no env and missing config",
+			hostEnv:    "",
+			configPath: missingPath,
+			want:       DefaultOrigin,
+		},
+		{
+			name:       "default when no env and empty config",
+			hostEnv:    "",
+			configPath: configEmpty,
+			want:       DefaultOrigin,
+		},
+		{
+			name:       "whitespace env treated as unset falls back to config",
+			hostEnv:    "   ",
+			configPath: configWithHost,
+			want:       "https://staging.example.com",
+		},
+		{
+			name:       "config currentHost wins over default",
+			hostEnv:    "",
+			configPath: configWithHost,
+			want:       "https://staging.example.com",
+		},
+		{
+			name:       "GENOS_HOST wins over config",
+			hostEnv:    "http://127.0.0.1:8000",
+			configPath: configWithHost,
+			want:       "http://127.0.0.1:8000",
+		},
+		{
+			name:       "GENOS_HOST wins over missing config",
+			hostEnv:    "http://genos.localhost:8000",
+			configPath: missingPath,
+			want:       "http://genos.localhost:8000",
+		},
+		{
+			name:       "public http rejected",
+			hostEnv:    "http://example.com",
+			configPath: configWithHost,
+			wantErr:    "https",
+		},
 	}
-	got, err = ResolveOrigin("http://127.0.0.1:8000", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "http://127.0.0.1:8000" {
-		t.Fatalf("env origin = %q", got)
-	}
-	if _, err := ResolveOrigin("http://example.com", path); err == nil || !strings.Contains(err.Error(), "https") {
-		t.Fatalf("public http error = %v", err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ResolveOrigin(test.hostEnv, test.configPath)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("ResolveOrigin(%q, %q) = %q, %v; want error containing %q", test.hostEnv, test.configPath, got, err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ResolveOrigin(%q, %q): %v", test.hostEnv, test.configPath, err)
+			}
+			if got != test.want {
+				t.Fatalf("ResolveOrigin(%q, %q) = %q, want %q", test.hostEnv, test.configPath, got, test.want)
+			}
+		})
 	}
 
 	host, ok, err := ParseCurrentHost("currentHost = 'http://genos.localhost:8000'\n")

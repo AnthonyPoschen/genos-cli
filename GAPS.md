@@ -2,6 +2,8 @@
 
 **Usable today:** mint or copy a personal access token from the Genos account UI, then `genos auth token` (stdin) or the Omarchy panel Connect/paste flow. Both write the shared host store under `~/.config/genos/`. Agents can also mint PATs via `genos auth token-create` (secret printed once on stdout) and revoke with `genos auth token-revoke --yes`.
 
+**API origin:** defaults to `https://genosservers.com`. `GENOS_HOST` is an optional debug/local override, not required for normal use; `currentHost` in `config.toml` overrides the default when set.
+
 **Blocked until Genos ships device auth on the deployment:** `genos auth login` and panel device sign-in need `POST /api/v1/auth/device/codes` and `POST /api/v1/auth/device/tokens` (production currently 404s those routes; tracked as genos #216). Browser approve/deny helpers (`GET …/device/pending`, `POST …/approvals|denials`) exist in master Genos but are not CLI-facing.
 
 This repository is HTTP-only and cannot finish Clerk/device login by itself.

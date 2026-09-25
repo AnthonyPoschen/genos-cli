@@ -12,10 +12,15 @@ Pin a commit or tag instead of `@latest` when you want a fixed build.
 
 ## Origin
 
-`GENOS_HOST` selects the API origin for one command. When it is unset, genos reads `currentHost` from `$XDG_CONFIG_HOME/genos/config.toml`, which defaults to `~/.config/genos/config.toml`.
+The API origin defaults to `https://genosservers.com`. You do not need to set a host for production.
+
+Optional overrides, first match wins:
+
+1. `GENOS_HOST` — debug/local override for one command (or process).
+2. `currentHost` in `$XDG_CONFIG_HOME/genos/config.toml` (default `~/.config/genos/config.toml`).
 
 ```toml
-currentHost = "https://genosservers.com"
+currentHost = "http://127.0.0.1:8000"
 ```
 
 That file has no token. `http` is allowed only for `localhost`, `127.0.0.1`, and `genos.localhost`. Any other host must be `https`.
@@ -44,7 +49,7 @@ If `credentials.json` is group- or world-readable, genos refuses it until you `c
 
 Built with [Cobra](https://github.com/spf13/cobra). Root help lists **groups only**; use `genos <group> --help` for direct children.
 
-Environment: `GENOS_HOST` / `GENOS_TOKEN` via [envconfig](https://github.com/kelseyhightower/envconfig) (prefix `GENOS`). Same resolution after env: `config.toml` `currentHost` → OS keyring → `credentials.json` `0600`. `GENOS_TOKEN` is never written to disk; `local.env` is not read.
+Environment: optional `GENOS_HOST` (debug/local API origin override) and `GENOS_TOKEN` via [envconfig](https://github.com/kelseyhightower/envconfig) (prefix `GENOS`). Origin resolution: `GENOS_HOST` → `config.toml` `currentHost` → default `https://genosservers.com`. Token resolution after env: OS keyring → `credentials.json` `0600`. `GENOS_TOKEN` is never written to disk; `local.env` is not read.
 
 ```text
 genos server list

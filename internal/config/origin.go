@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// DefaultOrigin is the production Genos API origin used when GENOS_HOST is
+// unset/empty and config.toml has no currentHost.
+const DefaultOrigin = "https://genosservers.com"
+
 // Dir is $XDG_CONFIG_HOME/genos, or ~/.config/genos when the variable is empty.
 func Dir(xdgConfigHome, home string) string {
 	if strings.TrimSpace(xdgConfigHome) != "" {
@@ -19,7 +23,7 @@ func Dir(xdgConfigHome, home string) string {
 }
 
 // ResolveOrigin returns GENOS_HOST when it is non-empty, otherwise currentHost
-// from configPath.
+// from configPath, otherwise DefaultOrigin.
 func ResolveOrigin(hostEnv, configPath string) (string, error) {
 	if strings.TrimSpace(hostEnv) != "" {
 		return ValidateOrigin(hostEnv)
@@ -27,7 +31,7 @@ func ResolveOrigin(hostEnv, configPath string) (string, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", errors.New("set GENOS_HOST or currentHost in config.toml")
+			return ValidateOrigin(DefaultOrigin)
 		}
 		return "", err
 	}
@@ -36,7 +40,7 @@ func ResolveOrigin(hostEnv, configPath string) (string, error) {
 		return "", err
 	}
 	if !ok || strings.TrimSpace(host) == "" {
-		return "", errors.New("set GENOS_HOST or currentHost in config.toml")
+		return ValidateOrigin(DefaultOrigin)
 	}
 	return ValidateOrigin(host)
 }

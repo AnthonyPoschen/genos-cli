@@ -71,6 +71,6 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 
 ## Credentials
 
-`GENOS_HOST` overrides `currentHost` in `$XDG_CONFIG_HOME/genos/config.toml`. `GENOS_TOKEN` overrides stored credentials and must not be written to disk. Do not read `~/.config/genos/local.env`.
+API origin defaults to `https://genosservers.com`. Optional `GENOS_HOST` is a debug/local override; otherwise `currentHost` in `$XDG_CONFIG_HOME/genos/config.toml` is used when set. `GENOS_TOKEN` overrides stored credentials and must not be written to disk. Do not read `~/.config/genos/local.env`.
 
 If stdin is not a terminal and a confirmation is required, the command exits without sending the action. Pass `--yes` only after the server and the action have been named.
