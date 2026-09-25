@@ -26,9 +26,15 @@ func (r *runner) servers(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	for _, server := range servers {
-		fmt.Fprintf(r.out, "%s\t%s\t%s\n", oneLine(server.Name), oneLine(server.Game.Name), oneLine(server.Status))
+	if len(servers) == 0 {
+		WriteEmpty(r.out, "No servers.")
+		return 0
 	}
+	rows := make([][]string, 0, len(servers))
+	for _, server := range servers {
+		rows = append(rows, []string{server.ID, server.Name, server.Game.Name, server.Status})
+	}
+	WriteTable(r.out, []string{"ID", "NAME", "GAME", "STATUS"}, rows)
 	return 0
 }
 
@@ -49,7 +55,9 @@ func (r *runner) status(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintf(r.out, "%s\t%s\t%s\n", oneLine(server.Name), oneLine(server.Game.Name), oneLine(server.Status))
+	WriteTable(r.out, []string{"ID", "NAME", "GAME", "STATUS"}, [][]string{{
+		server.ID, server.Name, server.Game.Name, server.Status,
+	}})
 	return 0
 }
 

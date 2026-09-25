@@ -27,15 +27,27 @@ func (r *runner) setups(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	for _, setup := range chooser.Setups {
-		mark := ""
-		if setup.ID == chooser.SelectedSetupID && setup.ID != "" {
-			mark = "*"
+	if len(chooser.Setups) == 0 {
+		WriteEmpty(r.out, "No profiles.")
+	} else {
+		rows := make([][]string, 0, len(chooser.Setups))
+		for _, setup := range chooser.Setups {
+			mark := ""
+			if setup.ID == chooser.SelectedSetupID && setup.ID != "" {
+				mark = "*"
+			}
+			rows = append(rows, []string{setup.ID, setup.Name, setup.Game.Name, mark})
 		}
-		fmt.Fprintf(r.out, "%s\t%s\t%s\t%s\n", oneLine(setup.ID), oneLine(setup.Name), oneLine(setup.Game.Name), mark)
+		WriteTable(r.out, []string{"ID", "NAME", "GAME", "SELECTED"}, rows)
 	}
-	for _, game := range chooser.CreatableGames {
-		fmt.Fprintf(r.out, "creatable\t%s\t%s\n", oneLine(game.ID), oneLine(game.Name))
+	if len(chooser.CreatableGames) > 0 {
+		fmt.Fprintln(r.out)
+		fmt.Fprintln(r.out, "Creatable games:")
+		rows := make([][]string, 0, len(chooser.CreatableGames))
+		for _, game := range chooser.CreatableGames {
+			rows = append(rows, []string{game.ID, game.Name})
+		}
+		WriteTable(r.out, []string{"ID", "NAME"}, rows)
 	}
 	return 0
 }
