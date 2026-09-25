@@ -1738,3 +1738,271 @@ func TestBroadcastSurfacesRateLimit(t *testing.T) {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
+
+func TestMeDashboardCatalog(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/me":
+			_, _ = io.WriteString(w, `{"id":"user-1","clerkUserID":"clerk_1","sessionID":"sess","primaryEmail":"a@example.com","isPlatformAdmin":false}`)
+		case "/api/v1/dashboard":
+			_, _ = io.WriteString(w, `{"servers":[],"profiles":[{"id":"p1","name":"Alpha","game":{"name":"Factorio"},"serverName":"srv","selected":true}],"profileCapacity":{"used":1,"limit":5}}`)
+		case "/api/v1/catalog":
+			_, _ = io.WriteString(w, `{"games":[{"id":"factorio","name":"Factorio"}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"me"}, opts); code != 0 {
+		t.Fatalf("me exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"clerkUserID": "clerk_1"`) {
+		t.Fatalf("me stdout %q", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"dashboard"}, opts); code != 0 {
+		t.Fatalf("dashboard exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"profileCapacity"`) {
+		t.Fatalf("dashboard stdout %q", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"catalog"}, opts); code != 0 {
+		t.Fatalf("catalog exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"factorio"`) {
+		t.Fatalf("catalog stdout %q", stdout.String())
+	}
+}
+
+func TestProfilesCreateRenameDeleteAutofill(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/dashboard":
+			_, _ = io.WriteString(w, `{"servers":[],"profiles":[{"id":"prof-1","name":"Old","game":{"name":"Factorio"},"selected":false}],"profileCapacity":{"used":1,"limit":5}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/profiles":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"setup":{"id":"prof-new","name":"Factorio","game":{"name":"Factorio"}},"capacity":{"used":2,"limit":5}}`)
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/profiles/prof-1":
+			_, _ = io.WriteString(w, `{"setup":{"id":"prof-1","name":"New","game":{"name":"Factorio"}}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/profiles/prof-1":
+			_, _ = io.WriteString(w, `{}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles/games":
+			_, _ = io.WriteString(w, `{"setups":[],"capacity":{"used":1,"limit":5},"creatableGames":[{"id":"factorio","name":"Factorio"}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"profiles"}, opts); code != 0 {
+		t.Fatalf("profiles exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "prof-1\tOld\tFactorio") || !strings.Contains(stdout.String(), "capacity\t1\t5") {
+		t.Fatalf("profiles list %q", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"profiles", "games"}, opts); code != 0 {
+		t.Fatalf("games exit %d stderr %s", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"profiles", "create", "--game", "factorio"}, opts); code != 0 {
+		t.Fatalf("create exit %d stderr %s", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"profiles", "rename", "prof-1", "New"}, opts); code != 0 {
+		t.Fatalf("rename exit %d stderr %s", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"profiles", "delete", "prof-1"}, opts); code != 2 {
+		t.Fatalf("delete without --yes exit %d", code)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"profiles", "delete", "prof-1", "--yes"}, opts); code != 0 {
+		t.Fatalf("delete exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var renameBody, deleteBody string
+	for _, hit := range hits {
+		if hit.Method == http.MethodPatch {
+			renameBody = hit.Body
+		}
+		if hit.Method == http.MethodDelete {
+			deleteBody = hit.Body
+		}
+	}
+	if !strings.Contains(renameBody, `"expectedName":"Old"`) || !strings.Contains(renameBody, `"name":"New"`) {
+		t.Fatalf("rename body %s", renameBody)
+	}
+	if !strings.Contains(deleteBody, `"expectedName":"Old"`) {
+		t.Fatalf("delete body %s", deleteBody)
+	}
+}
+
+func TestProfilesConfigGetPutAutofill(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles/prof-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"prof-1","gameID":"factorio","version":"v3","values":{"x":1},"editable":true,"updatedAt":"2026-01-02T03:04:05Z","secrets":{"version":"s1","configured":false,"pending":false}}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/profiles/prof-1/configuration":
+			_, _ = io.WriteString(w, `{"configuration":{"setupID":"prof-1","gameID":"factorio","version":"v4","values":{"x":2},"editable":true,"updatedAt":"2026-01-02T04:00:00Z","secrets":{"version":"s1","configured":false,"pending":false}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"profiles", "config", "get", "prof-1"}, opts); code != 0 {
+		t.Fatalf("get exit %d stderr %s", code, stderr.String())
+	}
+	opts.Stdin = strings.NewReader(`{"values":{"x":2}}`)
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"profiles", "config", "put", "prof-1"}, opts); code != 0 {
+		t.Fatalf("put exit %d stderr %s", code, stderr.String())
+	}
+	var put hit
+	for _, h := range rec.snapshot() {
+		if h.Method == http.MethodPut {
+			put = h
+		}
+	}
+	if !strings.Contains(put.Body, `"expectedSetupID":"prof-1"`) || !strings.Contains(put.Body, `"version":"v3"`) {
+		t.Fatalf("put body %s", put.Body)
+	}
+}
+
+func TestSetupCopyStartWaitSuccessAndFail(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		rec := &recorder{}
+		polls := 0
+		server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setup-copy-destinations":
+				_, _ = io.WriteString(w, `{"destinations":[{"serverID":"srv-2","name":"Beta","eligible":true}]}`)
+			case r.Method == http.MethodPost && r.URL.Path == "/api/v1/servers/srv-1/setups/setup-a/copies":
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = io.WriteString(w, `{"copy":{"id":"copy-1","status":"pending","progressPercent":0,"mode":"copy"}}`)
+			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers/srv-1/setup-copies/copy-1":
+				polls++
+				if polls < 2 {
+					_, _ = io.WriteString(w, `{"copy":{"id":"copy-1","status":"running","progressPercent":40,"mode":"copy"}}`)
+					return
+				}
+				_, _ = io.WriteString(w, `{"copy":{"id":"copy-1","status":"succeeded","progressPercent":100,"mode":"copy"}}`)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+		opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+		if code := Run([]string{"setup-copy", "destinations", "srv-1"}, opts); code != 0 {
+			t.Fatalf("destinations exit %d stderr %s", code, stderr.String())
+		}
+		stdout.Reset()
+		stderr.Reset()
+		if code := Run([]string{"setup-copy", "start", "srv-1", "setup-a", "--destination", "srv-2", "--mode", "copy", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code != 0 {
+			t.Fatalf("start wait exit %d stderr %s", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), `"status": "succeeded"`) {
+			t.Fatalf("stdout %q", stdout.String())
+		}
+	})
+	t.Run("fail", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case r.Method == http.MethodPost:
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = io.WriteString(w, `{"copy":{"id":"copy-2","status":"pending","progressPercent":0}}`)
+			default:
+				_, _ = io.WriteString(w, `{"copy":{"id":"copy-2","status":"failed","progressPercent":10,"message":"boom"}}`)
+			}
+		}))
+		defer server.Close()
+		opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+		if code := Run([]string{"setup-copy", "start", "srv-1", "setup-a", "--destination", "srv-2", "--mode", "transfer", "--wait", "--interval", "100ms", "--timeout", "5s"}, opts); code == 0 {
+			t.Fatal("expected failure")
+		}
+		if !strings.Contains(stdout.String(), `"status": "failed"`) {
+			t.Fatalf("stdout %q", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "setup copy failed") {
+			t.Fatalf("stderr %q", stderr.String())
+		}
+	})
+}
+
+func TestAuthTokensCreateRevoke(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec.Handler(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/tokens":
+			_, _ = io.WriteString(w, `{"tokens":[{"id":"tok-1","tokenPrefix":"genos_abc","name":"laptop"}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/tokens":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"token":{"id":"tok-2","tokenPrefix":"genos_xyz","name":"ci"},"secret":"genos_xyz_PLAINTEXT_ONCE"}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/auth/tokens/tok-1":
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"auth", "tokens"}, opts); code != 0 {
+		t.Fatalf("tokens exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"tokenPrefix": "genos_abc"`) {
+		t.Fatalf("tokens stdout %q", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"auth", "token-create", "--name", "ci", "--client-name", "genos-cli", "--machine-name", "box"}, opts); code != 0 {
+		t.Fatalf("token-create exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "genos_xyz_PLAINTEXT_ONCE") {
+		t.Fatalf("secret missing from stdout %q", stdout.String())
+	}
+	if strings.Contains(stderr.String(), "genos_xyz_PLAINTEXT_ONCE") {
+		t.Fatalf("secret leaked to stderr %q", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"auth", "token-revoke", "tok-1"}, opts); code != 2 {
+		t.Fatalf("revoke without --yes exit %d", code)
+	}
+	if code := Run([]string{"auth", "token-revoke", "tok-1", "--yes"}, opts); code != 0 {
+		t.Fatalf("revoke exit %d stderr %s", code, stderr.String())
+	}
+	hits := rec.snapshot()
+	var createBody string
+	for _, hit := range hits {
+		if hit.Method == http.MethodPost {
+			createBody = hit.Body
+		}
+	}
+	if !strings.Contains(createBody, `"name":"ci"`) || !strings.Contains(createBody, `"clientName":"genos-cli"`) || !strings.Contains(createBody, `"machineName":"box"`) {
+		t.Fatalf("create body %s", createBody)
+	}
+}

@@ -46,6 +46,24 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos saves import <serverID> --file path.zip […]` creates an import, PUTs the zip to `uploadURL` (no Genos bearer). Without `--wait`, stops after upload. With `--wait`, validates, polls to ready, and replaces only with `--yes` (destructive).
 - `genos saves import-status <serverID> <importID>` / `import-validate` / `import-replace --yes` cover the stepped flow. `--apply-save-mods` / `--no-apply-save-mods` set `applySaveMods` when required. failed/expired exit non-zero; never invent success.
 - Profile `/api/v1/profiles/.../save-*` mirrors are out of scope here.
+- `genos me` prints `GET /api/v1/me` JSON (id, clerkUserID, sessionID, primaryEmail, isPlatformAdmin).
+- `genos dashboard` prints `GET /api/v1/dashboard` JSON (servers, profiles, profileCapacity).
+- `genos catalog` prints public `GET /api/v1/catalog` JSON.
+- `genos profiles` / `genos profiles list` lists library profiles from dashboard (there is **no** `GET /profiles` list route) and prints `capacity\tused\tlimit`.
+- `genos profiles games` prints creatable library games JSON (`GET /profiles/games`).
+- `genos profiles create --game <gameID>` creates a library profile (JSON).
+- `genos profiles rename <profileID> <name> [--expected-name <name>]` renames; autofills expectedName from dashboard when omitted.
+- `genos profiles delete <profileID> --yes [--expected-name <name>]` deletes; requires `--yes`; autofills expectedName.
+- `genos profiles config get <profileID>` / `put [--file path]` mirror server config get/put (concurrency autofill from GET when omitted).
+- Attaching a library profile to a running server is already `genos select-setup <serverID> <setupID>` (PUT selected-setup). No separate attach route.
+- `genos setup-copy destinations <serverID>` lists copy/transfer destinations.
+- `genos setup-copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval] [--timeout]` starts a copy (202). `--wait` polls until succeeded|failed like saves; never invent success.
+- `genos setup-copy status <serverID> <copyID>` prints one copy JSON.
+- `genos auth tokens` lists PAT metadata (`{"tokens":[…]}`).
+- `genos auth token-create [--name N] [--client-name C] [--machine-name M]` creates a PAT and prints `token` + **secret once on stdout**. Do not log the secret to stderr, SKILL examples, or fixtures. Prefer storing with `genos auth token` (stdin); do not auto-save.
+- `genos auth token-revoke <tokenID> --yes` revokes a PAT (204).
+- **Billing caution:** do not auto-ship spendy flows (`plan-changes`, reactivate, checkout, portal). If ever added, require explicit human confirmation.
+- Profile `/profiles/{id}/mods…` and `/profiles/{id}/save-*` mirrors are the immediate follow-up; not in this release.
 - `genos auth status` shows the origin, whether the token came from `env`, `keyring`, or `file`, and a token prefix only.
 - `genos auth login` and `genos auth token` are for a human. Never pass a token as an argument.
 
