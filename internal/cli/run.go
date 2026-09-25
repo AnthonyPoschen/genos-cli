@@ -65,6 +65,21 @@ Usage:
   genos profiles delete <profileID> --yes [--expected-name <name>]
   genos profiles config get <profileID>
   genos profiles config put <profileID> [--file path]
+  genos profiles mods list <profileID>
+  genos profiles mods search <profileID> [--query q] [--category c] [--sort s] [--page n] [--page-size n]
+  genos profiles mods show <profileID> <providerModID>
+  genos profiles mods credentials <profileID> --username U --token T [--expected-setup ID]
+  genos profiles mods credentials-clear <profileID> [--expected-setup ID]
+  genos profiles mods stage <profileID> <providerModID> --provider ID [--expected-setup ID]
+  genos profiles mods unstage <profileID> [--expected-setup ID]
+  genos profiles mods discard <profileID> [--expected-setup ID]
+  genos profiles mods apply <profileID> [--stage-id ID] [--expected-setup ID]
+  genos profiles saves export <profileID> [--wait] [--interval 2s] [--timeout 15m] [--output path]
+  genos profiles saves export-status <profileID> <exportID>
+  genos profiles saves import <profileID> --file path.zip [--media-type application/zip] [--wait] [--interval 2s] [--timeout 30m] [--apply-save-mods|--no-apply-save-mods] [--yes]
+  genos profiles saves import-status <profileID> <importID>
+  genos profiles saves import-validate <profileID> <importID>
+  genos profiles saves import-replace <profileID> <importID> --yes [--apply-save-mods|--no-apply-save-mods]
   genos setup-copy destinations <serverID>
   genos setup-copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval 2s] [--timeout 15m]
   genos setup-copy status <serverID> <copyID>
@@ -118,8 +133,9 @@ mods apply also autofills stageID from staged.stageID when --stage-id is
 omitted (fails clearly if nothing is staged). mods stage requires
 --provider (examples: factorio-mod-portal, steam-workshop). API errors
 such as server_not_confirmed_stopped and mod_provider_credentials_required
-are surfaced as-is. Profile /api/v1/profiles/.../mods mirrors, draft-set,
-draft-apply, and import are out of scope for this release.
+are surfaced as-is. Library prep uses genos profiles mods … (same flags;
+on profiles expectedSetupID is the profile id). draft-set, draft-apply, and
+import remain out of scope.
 
 saves export starts a server save export (POST …/save-exports). Without
 --wait it prints the export JSON immediately. With --wait it polls until
@@ -137,6 +153,8 @@ omitted. delete requires --yes. Attaching a library profile to a running
 server is already genos select-setup <serverID> <setupID> (PUT selected-setup);
 there is no separate attach route. profiles config get/put mirror server
 config put autofill of concurrency fields from GET when omitted.
+profiles mods / profiles saves mirror the server mods/saves commands against
+/api/v1/profiles/{id}/… for library prep before select-setup attach.
 
 setup-copy destinations/start/status cover setup copy/transfer between owned
 servers. --wait polls until succeeded|failed (same style as saves); never
@@ -155,8 +173,8 @@ poll to ready (or failed/expired), then require --yes before replace
 import-replace hint. With --yes: replace then poll to succeeded|failed|expired
 (default timeout 30m). --apply-save-mods / --no-apply-save-mods set
 applySaveMods when the review requires a mod choice. recovery is surfaced
-on progress lines and in JSON. Profile /api/v1/profiles/…/save-* mirrors
-are deferred.
+on progress lines and in JSON. Library prep uses genos profiles saves …
+against /api/v1/profiles/{id}/save-* (same poll/--wait/--output rules).
 `
 
 // Options configures process dependencies. Zero values use the real process.

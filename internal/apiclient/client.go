@@ -703,8 +703,13 @@ type ModCatalogQuery struct {
 	PageSize int
 }
 
-func modsPath(serverID, suffix string) string {
-	base := "/api/v1/servers/" + url.PathEscape(serverID) + "/mods"
+const (
+	ownerKindServers  = "servers"
+	ownerKindProfiles = "profiles"
+)
+
+func modsPath(ownerKind, ownerID, suffix string) string {
+	base := "/api/v1/" + ownerKind + "/" + url.PathEscape(ownerID) + "/mods"
 	if suffix == "" {
 		return base
 	}
@@ -724,7 +729,16 @@ func decodeModsPayload(data []byte) (SetupModState, error) {
 // GetMods calls GET /api/v1/servers/{id}/mods.
 // Idempotency-Key is not sent (matches dashboard).
 func (c *Client) GetMods(ctx context.Context, serverID string) (SetupModState, error) {
-	data, status, err := c.do(ctx, http.MethodGet, modsPath(serverID, ""), nil, false)
+	return c.getMods(ctx, ownerKindServers, serverID)
+}
+
+// GetProfileMods calls GET /api/v1/profiles/{id}/mods.
+func (c *Client) GetProfileMods(ctx context.Context, profileID string) (SetupModState, error) {
+	return c.getMods(ctx, ownerKindProfiles, profileID)
+}
+
+func (c *Client) getMods(ctx context.Context, ownerKind, ownerID string) (SetupModState, error) {
+	data, status, err := c.do(ctx, http.MethodGet, modsPath(ownerKind, ownerID, ""), nil, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -737,6 +751,15 @@ func (c *Client) GetMods(ctx context.Context, serverID string) (SetupModState, e
 // SearchModCatalog calls GET /api/v1/servers/{id}/mods/catalog.
 // Returns the inner catalog JSON object as returned by the API.
 func (c *Client) SearchModCatalog(ctx context.Context, serverID string, query ModCatalogQuery) (json.RawMessage, error) {
+	return c.searchModCatalog(ctx, ownerKindServers, serverID, query)
+}
+
+// SearchProfileModCatalog calls GET /api/v1/profiles/{id}/mods/catalog.
+func (c *Client) SearchProfileModCatalog(ctx context.Context, profileID string, query ModCatalogQuery) (json.RawMessage, error) {
+	return c.searchModCatalog(ctx, ownerKindProfiles, profileID, query)
+}
+
+func (c *Client) searchModCatalog(ctx context.Context, ownerKind, ownerID string, query ModCatalogQuery) (json.RawMessage, error) {
 	values := url.Values{}
 	if query.Query != "" {
 		values.Set("q", query.Query)
@@ -753,7 +776,7 @@ func (c *Client) SearchModCatalog(ctx context.Context, serverID string, query Mo
 	if query.PageSize > 0 {
 		values.Set("pageSize", strconv.Itoa(query.PageSize))
 	}
-	path := modsPath(serverID, "/catalog")
+	path := modsPath(ownerKind, ownerID, "/catalog")
 	if encoded := values.Encode(); encoded != "" {
 		path += "?" + encoded
 	}
@@ -779,7 +802,16 @@ func (c *Client) SearchModCatalog(ctx context.Context, serverID string, query Mo
 // InspectModCatalog calls GET /api/v1/servers/{id}/mods/catalog/{modID}.
 // Returns the inner mod JSON object as returned by the API.
 func (c *Client) InspectModCatalog(ctx context.Context, serverID, providerModID string) (json.RawMessage, error) {
-	data, status, err := c.do(ctx, http.MethodGet, modsPath(serverID, "/catalog/"+url.PathEscape(providerModID)), nil, false)
+	return c.inspectModCatalog(ctx, ownerKindServers, serverID, providerModID)
+}
+
+// InspectProfileModCatalog calls GET /api/v1/profiles/{id}/mods/catalog/{modID}.
+func (c *Client) InspectProfileModCatalog(ctx context.Context, profileID, providerModID string) (json.RawMessage, error) {
+	return c.inspectModCatalog(ctx, ownerKindProfiles, profileID, providerModID)
+}
+
+func (c *Client) inspectModCatalog(ctx context.Context, ownerKind, ownerID, providerModID string) (json.RawMessage, error) {
+	data, status, err := c.do(ctx, http.MethodGet, modsPath(ownerKind, ownerID, "/catalog/"+url.PathEscape(providerModID)), nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -800,6 +832,15 @@ func (c *Client) InspectModCatalog(ctx context.Context, serverID, providerModID 
 
 // SetModCredentials calls PUT /api/v1/servers/{id}/mods/credentials.
 func (c *Client) SetModCredentials(ctx context.Context, serverID, expectedSetupID, username, token string) (SetupModState, error) {
+	return c.setModCredentials(ctx, ownerKindServers, serverID, expectedSetupID, username, token)
+}
+
+// SetProfileModCredentials calls PUT /api/v1/profiles/{id}/mods/credentials.
+func (c *Client) SetProfileModCredentials(ctx context.Context, profileID, expectedSetupID, username, token string) (SetupModState, error) {
+	return c.setModCredentials(ctx, ownerKindProfiles, profileID, expectedSetupID, username, token)
+}
+
+func (c *Client) setModCredentials(ctx context.Context, ownerKind, ownerID, expectedSetupID, username, token string) (SetupModState, error) {
 	body := struct {
 		ExpectedSetupID string `json:"expectedSetupID"`
 		Username        string `json:"username"`
@@ -809,7 +850,7 @@ func (c *Client) SetModCredentials(ctx context.Context, serverID, expectedSetupI
 		Username:        username,
 		Token:           token,
 	}
-	data, status, err := c.do(ctx, http.MethodPut, modsPath(serverID, "/credentials"), body, false)
+	data, status, err := c.do(ctx, http.MethodPut, modsPath(ownerKind, ownerID, "/credentials"), body, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -821,12 +862,21 @@ func (c *Client) SetModCredentials(ctx context.Context, serverID, expectedSetupI
 
 // ClearModCredentials calls DELETE /api/v1/servers/{id}/mods/credentials.
 func (c *Client) ClearModCredentials(ctx context.Context, serverID, expectedSetupID string) (SetupModState, error) {
+	return c.clearModCredentials(ctx, ownerKindServers, serverID, expectedSetupID)
+}
+
+// ClearProfileModCredentials calls DELETE /api/v1/profiles/{id}/mods/credentials.
+func (c *Client) ClearProfileModCredentials(ctx context.Context, profileID, expectedSetupID string) (SetupModState, error) {
+	return c.clearModCredentials(ctx, ownerKindProfiles, profileID, expectedSetupID)
+}
+
+func (c *Client) clearModCredentials(ctx context.Context, ownerKind, ownerID, expectedSetupID string) (SetupModState, error) {
 	body := struct {
 		ExpectedSetupID string `json:"expectedSetupID"`
 	}{
 		ExpectedSetupID: expectedSetupID,
 	}
-	data, status, err := c.do(ctx, http.MethodDelete, modsPath(serverID, "/credentials"), body, false)
+	data, status, err := c.do(ctx, http.MethodDelete, modsPath(ownerKind, ownerID, "/credentials"), body, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -838,6 +888,15 @@ func (c *Client) ClearModCredentials(ctx context.Context, serverID, expectedSetu
 
 // StageMod calls PUT /api/v1/servers/{id}/mods/staged-selection.
 func (c *Client) StageMod(ctx context.Context, serverID, expectedSetupID, providerID, providerModID string) (SetupModState, error) {
+	return c.stageMod(ctx, ownerKindServers, serverID, expectedSetupID, providerID, providerModID)
+}
+
+// StageProfileMod calls PUT /api/v1/profiles/{id}/mods/staged-selection.
+func (c *Client) StageProfileMod(ctx context.Context, profileID, expectedSetupID, providerID, providerModID string) (SetupModState, error) {
+	return c.stageMod(ctx, ownerKindProfiles, profileID, expectedSetupID, providerID, providerModID)
+}
+
+func (c *Client) stageMod(ctx context.Context, ownerKind, ownerID, expectedSetupID, providerID, providerModID string) (SetupModState, error) {
 	body := struct {
 		ExpectedSetupID string `json:"expectedSetupID"`
 		ProviderID      string `json:"providerID"`
@@ -847,7 +906,7 @@ func (c *Client) StageMod(ctx context.Context, serverID, expectedSetupID, provid
 		ProviderID:      providerID,
 		ProviderModID:   providerModID,
 	}
-	data, status, err := c.do(ctx, http.MethodPut, modsPath(serverID, "/staged-selection"), body, false)
+	data, status, err := c.do(ctx, http.MethodPut, modsPath(ownerKind, ownerID, "/staged-selection"), body, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -860,12 +919,21 @@ func (c *Client) StageMod(ctx context.Context, serverID, expectedSetupID, provid
 // UnstageMod calls POST /api/v1/servers/{id}/mods/staged-removal.
 // This stages removal of the currently enabled mod (not discard of a staged selection).
 func (c *Client) UnstageMod(ctx context.Context, serverID, expectedSetupID string) (SetupModState, error) {
+	return c.unstageMod(ctx, ownerKindServers, serverID, expectedSetupID)
+}
+
+// UnstageProfileMod calls POST /api/v1/profiles/{id}/mods/staged-removal.
+func (c *Client) UnstageProfileMod(ctx context.Context, profileID, expectedSetupID string) (SetupModState, error) {
+	return c.unstageMod(ctx, ownerKindProfiles, profileID, expectedSetupID)
+}
+
+func (c *Client) unstageMod(ctx context.Context, ownerKind, ownerID, expectedSetupID string) (SetupModState, error) {
 	body := struct {
 		ExpectedSetupID string `json:"expectedSetupID"`
 	}{
 		ExpectedSetupID: expectedSetupID,
 	}
-	data, status, err := c.do(ctx, http.MethodPost, modsPath(serverID, "/staged-removal"), body, false)
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(ownerKind, ownerID, "/staged-removal"), body, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -877,12 +945,21 @@ func (c *Client) UnstageMod(ctx context.Context, serverID, expectedSetupID strin
 
 // DiscardMod calls POST /api/v1/servers/{id}/mods/discard.
 func (c *Client) DiscardMod(ctx context.Context, serverID, expectedSetupID string) (SetupModState, error) {
+	return c.discardMod(ctx, ownerKindServers, serverID, expectedSetupID)
+}
+
+// DiscardProfileMod calls POST /api/v1/profiles/{id}/mods/discard.
+func (c *Client) DiscardProfileMod(ctx context.Context, profileID, expectedSetupID string) (SetupModState, error) {
+	return c.discardMod(ctx, ownerKindProfiles, profileID, expectedSetupID)
+}
+
+func (c *Client) discardMod(ctx context.Context, ownerKind, ownerID, expectedSetupID string) (SetupModState, error) {
 	body := struct {
 		ExpectedSetupID string `json:"expectedSetupID"`
 	}{
 		ExpectedSetupID: expectedSetupID,
 	}
-	data, status, err := c.do(ctx, http.MethodPost, modsPath(serverID, "/discard"), body, false)
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(ownerKind, ownerID, "/discard"), body, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -894,6 +971,15 @@ func (c *Client) DiscardMod(ctx context.Context, serverID, expectedSetupID strin
 
 // ApplyMod calls POST /api/v1/servers/{id}/mods/apply.
 func (c *Client) ApplyMod(ctx context.Context, serverID, expectedSetupID, stageID string) (SetupModState, error) {
+	return c.applyMod(ctx, ownerKindServers, serverID, expectedSetupID, stageID)
+}
+
+// ApplyProfileMod calls POST /api/v1/profiles/{id}/mods/apply.
+func (c *Client) ApplyProfileMod(ctx context.Context, profileID, expectedSetupID, stageID string) (SetupModState, error) {
+	return c.applyMod(ctx, ownerKindProfiles, profileID, expectedSetupID, stageID)
+}
+
+func (c *Client) applyMod(ctx context.Context, ownerKind, ownerID, expectedSetupID, stageID string) (SetupModState, error) {
 	body := struct {
 		ExpectedSetupID string `json:"expectedSetupID"`
 		StageID         string `json:"stageID"`
@@ -901,7 +987,7 @@ func (c *Client) ApplyMod(ctx context.Context, serverID, expectedSetupID, stageI
 		ExpectedSetupID: expectedSetupID,
 		StageID:         stageID,
 	}
-	data, status, err := c.do(ctx, http.MethodPost, modsPath(serverID, "/apply"), body, false)
+	data, status, err := c.do(ctx, http.MethodPost, modsPath(ownerKind, ownerID, "/apply"), body, false)
 	if err != nil {
 		return SetupModState{}, err
 	}
@@ -910,3 +996,4 @@ func (c *Client) ApplyMod(ctx context.Context, serverID, expectedSetupID, stageI
 	}
 	return decodeModsPayload(data)
 }
+
