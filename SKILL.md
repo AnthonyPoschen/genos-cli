@@ -34,6 +34,11 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos mods discard <serverID> [--expected-setup ID]` discards staged selection/removal.
 - `genos mods apply <serverID> [--stage-id ID] [--expected-setup ID]` applies the staged change. Without `--expected-setup` / `--stage-id`, GETs mods and autofills `setupID` / `staged.stageID` (fails clearly if nothing staged). API errors pass through.
 - Profile `/api/v1/profiles/.../mods` mirrors, `draft-set`/`draft-apply`, and `import` are out of scope here.
+- `genos saves export <serverID> [--wait] [--interval 2s] [--timeout 15m] [--output path]` starts a save export; `--wait` polls to a terminal status. Prints `downloadURL` on success; downloads bytes only with `--output`.
+- `genos saves export-status <serverID> <exportID>` prints one export JSON.
+- `genos saves import <serverID> --file path.zip […]` creates an import, PUTs the zip to `uploadURL` (no Genos bearer). Without `--wait`, stops after upload. With `--wait`, validates, polls to ready, and replaces only with `--yes` (destructive).
+- `genos saves import-status <serverID> <importID>` / `import-validate` / `import-replace --yes` cover the stepped flow. `--apply-save-mods` / `--no-apply-save-mods` set `applySaveMods` when required. failed/expired exit non-zero; never invent success.
+- Profile `/api/v1/profiles/.../save-*` mirrors are out of scope here.
 - `genos auth status` shows the origin, whether the token came from `env`, `keyring`, or `file`, and a token prefix only.
 - `genos auth login` and `genos auth token` are for a human. Never pass a token as an argument.
 
