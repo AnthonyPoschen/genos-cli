@@ -135,7 +135,7 @@ func TestServersAndStatus(t *testing.T) {
 	if code := Run([]string{"server", "list"}, opts); code != 0 {
 		t.Fatalf("servers exit %d stderr %s", code, stderr.String())
 	}
-	wantServers := "ID     NAME   GAME      STATUS\nsrv-1  Alpha  Factorio  Running\nsrv-2  Beta   Rust      Stopped\n"
+	wantServers := "ID     NAME   GAME      STATUS   OWNER\nsrv-1  Alpha  Factorio  Running  you\nsrv-2  Beta   Rust      Stopped  you\n"
 	if stdout.String() != wantServers {
 		t.Fatalf("servers output %q want %q", stdout.String(), wantServers)
 	}

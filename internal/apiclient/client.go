@@ -37,12 +37,19 @@ func New(origin, token string) *Client {
 
 // Server is the customer server object returned by the API.
 type Server struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Game           Game     `json:"game"`
-	Status         string   `json:"status"`
-	NotableUpdates []string `json:"notableUpdates"`
-	Metrics        *Metrics `json:"metrics"`
+	ID             string       `json:"id"`
+	Name           string       `json:"name"`
+	Game           Game         `json:"game"`
+	Status         string       `json:"status"`
+	NotableUpdates []string     `json:"notableUpdates"`
+	Metrics        *Metrics     `json:"metrics"`
+	Access         ServerAccess `json:"access"`
+}
+
+type ServerAccess struct {
+	Role           string `json:"role"`
+	ManageProfiles bool   `json:"manageProfiles"`
+	OwnerEmail     string `json:"ownerEmail"`
 }
 
 // Game is the nested game summary.
@@ -996,7 +1003,6 @@ func (c *Client) applyMod(ctx context.Context, ownerKind, ownerID, expectedSetup
 	}
 	return decodeModsPayload(data)
 }
-
 
 // DraftRevision returns collection.draft.revision when present and >= 1.
 func (s SetupModState) DraftRevision() (int64, bool) {

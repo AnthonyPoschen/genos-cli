@@ -23,6 +23,9 @@ func newServerCmd(r *runner) *cobra.Command {
 		newServerModsCmd(r),
 		newServerSavesCmd(r),
 		newServerProfileCmd(r),
+		newServerMemberCmd(r),
+		newServerInviteCmd(r),
+		newServerLeaveCmd(r),
 	)
 	return cmd
 }
@@ -30,7 +33,7 @@ func newServerCmd(r *runner) *cobra.Command {
 func newServerListCmd(r *runner) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List owned game servers",
+		Short: "List game servers this token can operate",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return codeErr(r.servers(nil))
