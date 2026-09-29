@@ -31,7 +31,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos server mods list <serverID>` prints selected-setup mods JSON (`GET /api/v1/servers/{id}/mods`).
 - `genos server mods search <serverID> [--query q] [--category c] [--sort s] [--page n] [--page-size n]` prints catalog JSON.
 - `genos server mods show <serverID> <providerModID>` prints one catalog mod JSON.
-- `genos server mods credentials <serverID> --username U --token T [--expected-setup ID]` stores provider credentials.
+- `genos server mods credentials <serverID> --username U [--expected-setup ID]` stores provider credentials. Read the provider token from stdin. `--token` is rejected.
 - `genos server mods credentials-clear <serverID> [--expected-setup ID]` clears provider credentials.
 - `genos server mods stage <serverID> <providerModID> --provider ID [--expected-setup ID]` stages a catalog mod (`--provider` required; e.g. `factorio-mod-portal`, `steam-workshop`).
 - `genos server mods unstage <serverID> [--expected-setup ID]` stages removal of the enabled mod.

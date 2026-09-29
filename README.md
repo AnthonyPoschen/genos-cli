@@ -129,7 +129,7 @@ Server mod routes under `/api/v1/servers/{serverID}/mods`. Library prep uses the
 | `genos server mods list <serverID>` | `GET …/mods` → prints the `mods` object |
 | `genos server mods search <serverID> [--query q] [--category c] [--sort s] [--page n] [--page-size n]` | `GET …/mods/catalog?q&category&sort&page&pageSize` → prints the `catalog` object |
 | `genos server mods show <serverID> <providerModID>` | `GET …/mods/catalog/{modID}` → prints the `mod` object |
-| `genos server mods credentials <serverID> --username U --token T [--expected-setup ID]` | `PUT …/mods/credentials` `{expectedSetupID,username,token}` |
+| `genos server mods credentials <serverID> --username U [--expected-setup ID]` | `PUT …/mods/credentials` `{expectedSetupID,username,token}` — provider token on stdin, not `--token` |
 | `genos server mods credentials-clear <serverID> [--expected-setup ID]` | `DELETE …/mods/credentials` `{expectedSetupID}` |
 | `genos server mods stage <serverID> <providerModID> --provider ID [--expected-setup ID]` | `PUT …/mods/staged-selection` `{expectedSetupID,providerID,providerModID}` |
 | `genos server mods unstage <serverID> [--expected-setup ID]` | `POST …/mods/staged-removal` `{expectedSetupID}` (stages removal of the enabled mod) |

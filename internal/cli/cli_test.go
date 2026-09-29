@@ -1271,11 +1271,41 @@ func TestModsDiscardAndCredentials(t *testing.T) {
 	defer server.Close()
 
 	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
-	if code := Run([]string{"server", "mods", "credentials", "srv-1", "--username", "player", "--token", "secret"}, opts); code != 0 {
+	opts.Stdin = strings.NewReader("stdin-token\n")
+	if code := Run([]string{"server", "mods", "credentials", "srv-1", "--username", "player"}, opts); code != 0 {
 		t.Fatalf("credentials exit %d stderr %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"credentialsConfigured": true`) {
 		t.Fatalf("credentials stdout %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "stdin-token") || strings.Contains(stderr.String(), "stdin-token") {
+		t.Fatal("provider token was printed")
+	}
+	var credentialBody string
+	for _, item := range rec.snapshot() {
+		if item.Method == http.MethodPut && item.Path == "/api/v1/servers/srv-1/mods/credentials" {
+			credentialBody = item.Body
+		}
+	}
+	if !strings.Contains(credentialBody, `"token":"stdin-token"`) || !strings.Contains(credentialBody, `"username":"player"`) {
+		t.Fatalf("credentials body %q", credentialBody)
+	}
+
+	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts.Stdin = strings.NewReader("stdin-token\n")
+	if code := Run([]string{"server", "mods", "credentials", "srv-1", "--username", "player", "--token", "flag-secret"}, opts); code == 0 {
+		t.Fatal("accepted --token")
+	}
+	if strings.Contains(stdout.String(), "flag-secret") || strings.Contains(stderr.String(), "flag-secret") {
+		t.Fatal("rejected token was printed")
+	}
+	if !strings.Contains(stderr.String(), "stdin") {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+	for _, item := range rec.snapshot() {
+		if strings.Contains(item.Body, "flag-secret") {
+			t.Fatalf("flag token was sent: %+v", item)
+		}
 	}
 
 	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)

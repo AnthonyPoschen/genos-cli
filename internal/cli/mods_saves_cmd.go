@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -96,15 +98,19 @@ func newModsCredentialsCmd(r *runner, target modsTarget, idName string) *cobra.C
 		Short: "Set mod provider credentials",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if flagChanged(cmd, "token") {
+				fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token")
+				return codeErr(2)
+			}
 			rebuilt := append([]string{}, args...)
 			rebuilt = appendFlag(rebuilt, "--username", username, flagChanged(cmd, "username"))
-			rebuilt = appendFlag(rebuilt, "--token", token, flagChanged(cmd, "token"))
 			rebuilt = appendFlag(rebuilt, "--expected-setup", expectedSetup, flagChanged(cmd, "expected-setup"))
 			return codeErr(r.modsCredentials(target, rebuilt))
 		},
 	}
 	cmd.Flags().StringVar(&username, "username", "", "Provider username")
-	cmd.Flags().StringVar(&token, "token", "", "Provider token")
+	cmd.Flags().StringVar(&token, "token", "", "Rejected. Read the provider token from stdin")
+	_ = cmd.Flags().MarkHidden("token")
 	cmd.Flags().StringVar(&expectedSetup, "expected-setup", "", "CAS expectedSetupID")
 	return cmd
 }

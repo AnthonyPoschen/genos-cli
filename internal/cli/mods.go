@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -159,9 +160,31 @@ func (r *runner) modsShow(target modsTarget, args []string) int {
 	return r.printRawJSON(detail)
 }
 
+func (r *runner) readProviderToken() (string, error) {
+	if r.terminal() {
+		fmt.Fprintln(r.err, "Paste the provider token and press enter.")
+	}
+	payload, err := io.ReadAll(io.LimitReader(r.in, 16<<10+1))
+	if err != nil {
+		return "", err
+	}
+	if len(payload) > 16<<10 {
+		return "", errors.New("provider token is too large")
+	}
+	token := strings.TrimSpace(string(payload))
+	if token == "" {
+		return "", errors.New("provider token is empty")
+	}
+	return token, nil
+}
+
 func (r *runner) modsCredentials(target modsTarget, args []string) int {
+	if tokenFlagValue(args) {
+		fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token")
+		return 2
+	}
 	rest, flags, err := splitModsFlags(args, map[string]bool{
-		"--username": true, "--token": true, "--expected-setup": true,
+		"--username": true, "--expected-setup": true,
 	})
 	if errors.Is(err, errHelp) {
 		return r.usage("")
@@ -176,9 +199,12 @@ func (r *runner) modsCredentials(target modsTarget, args []string) int {
 		return r.fail(err)
 	}
 	username, okUser := flags["--username"]
-	token, okToken := flags["--token"]
-	if !okUser || strings.TrimSpace(username) == "" || !okToken || strings.TrimSpace(token) == "" {
-		return r.usage(target.prefix + " credentials requires --username and --token")
+	if !okUser || strings.TrimSpace(username) == "" {
+		return r.usage(target.prefix + " credentials requires --username and the provider token on stdin")
+	}
+	token, err := r.readProviderToken()
+	if err != nil {
+		return r.fail(err)
 	}
 	client, err := r.api()
 	if err != nil {
@@ -675,6 +701,15 @@ func splitModsDraftFlags(args []string) (rest []string, flags map[string]string,
 		rest = append(rest, arg)
 	}
 	return rest, flags, modIDs, nil
+}
+
+func tokenFlagValue(args []string) bool {
+	for _, arg := range args {
+		if arg == "--token" || strings.HasPrefix(arg, "--token=") {
+			return true
+		}
+	}
+	return false
 }
 
 // splitModsFlags parses known --flag value pairs. Boolean presence flags are not used.
