@@ -32,9 +32,9 @@ func (r *runner) servers(args []string) int {
 	}
 	rows := make([][]string, 0, len(servers))
 	for _, server := range servers {
-		rows = append(rows, []string{server.ID, server.Name, server.Game.Name, server.Status})
+		rows = append(rows, []string{server.ID, server.Name, server.Game.Name, server.Status, ownerLabel(server)})
 	}
-	WriteTable(r.out, []string{"ID", "NAME", "GAME", "STATUS"}, rows)
+	WriteTable(r.out, []string{"ID", "NAME", "GAME", "STATUS", "OWNER"}, rows)
 	return 0
 }
 
