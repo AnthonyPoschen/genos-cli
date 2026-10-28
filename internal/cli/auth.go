@@ -112,10 +112,7 @@ func (r *runner) authStatus() int {
 	return 0
 }
 
-func (r *runner) authTokens(args []string) int {
-	if len(args) != 0 {
-		return r.usage("auth tokens takes no arguments")
-	}
+func (r *runner) authTokens(asJSON bool) int {
 	client, err := r.api()
 	if err != nil {
 		return r.fail(err)
@@ -126,7 +123,43 @@ func (r *runner) authTokens(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	return r.printJSON(map[string]any{"tokens": tokens})
+	if asJSON {
+		return r.printJSON(map[string]any{"tokens": tokens})
+	}
+	if len(tokens) == 0 {
+		WriteEmpty(r.out, "No tokens.")
+		return 0
+	}
+	rows := make([][]string, 0, len(tokens))
+	for _, token := range tokens {
+		rows = append(rows, []string{
+			token.ID,
+			token.TokenPrefix,
+			token.Name,
+			token.ClientName,
+			token.MachineName,
+			formatTime(token.CreatedAt),
+			formatTimePtr(token.LastUsedAt),
+			formatTimePtr(token.ExpiresAt),
+			formatTimePtr(token.RevokedAt),
+		})
+	}
+	WriteTable(r.out, []string{"ID", "PREFIX", "NAME", "CLIENT", "MACHINE", "CREATED", "LAST USED", "EXPIRES", "REVOKED"}, rows)
+	return 0
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+func formatTimePtr(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return formatTime(*t)
 }
 
 func (r *runner) authTokenCreate(args []string) int {
