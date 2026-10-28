@@ -44,9 +44,9 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos server saves export-status <serverID> <exportID>` prints one export JSON.
 - `genos server saves import <serverID> --file path.zip […]` creates an import, PUTs the zip to `uploadURL` (no Genos bearer). Without `--wait`, stops after upload. With `--wait`, validates, polls to ready, and replaces only with `--yes` (destructive).
 - `genos server saves import-status <serverID> <importID>` / `import-validate` / `import-replace --yes` cover the stepped flow. `--apply-save-mods` / `--no-apply-save-mods` set `applySaveMods` when required. failed/expired exit non-zero; never invent success.
-- `genos me` prints `GET /api/v1/me` JSON (id, clerkUserID, sessionID, primaryEmail, isPlatformAdmin).
+- `genos me` prints a headered table of the authenticated account (ID, CLERK USER, SESSION, EMAIL, ADMIN) from `GET /api/v1/me`. `--json` prints the JSON body (id, clerkUserID, sessionID, primaryEmail, isPlatformAdmin).
 - `genos dashboard` prints `GET /api/v1/dashboard` JSON (servers, profiles, profileCapacity).
-- `genos catalog` prints public `GET /api/v1/catalog` JSON.
+- `genos catalog` prints a headered table of public catalog games (ID, NAME) from `GET /api/v1/catalog`. `No games.` when the list is empty. `--json` prints the JSON body.
 - `genos profile list` lists library profiles from dashboard (there is **no** `GET /profiles` list route) as a headered table, then a separate `Capacity: used/limit` line.
 - `genos profile games` prints creatable library games JSON (`GET /profiles/games`).
 - `genos profile create --game <gameID>` creates a library profile (JSON).
@@ -59,7 +59,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos profile copy destinations <serverID>` lists copy/transfer destinations.
 - `genos profile copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval] [--timeout]` starts a copy (202). `--wait` polls until succeeded|failed like saves; never invent success.
 - `genos profile copy status <serverID> <copyID>` prints one copy JSON.
-- `genos auth tokens` lists PAT metadata (`{"tokens":[…]}`).
+- `genos auth tokens` lists PAT metadata as a headered table (ID, PREFIX, NAME, CLIENT, MACHINE, CREATED, LAST USED, EXPIRES, REVOKED). `No tokens.` when the list is empty. `--json` prints `{"tokens":[…]}`.
 - `genos auth token-create [--name N] [--client-name C] [--machine-name M]` creates a PAT and prints `token` + **secret once on stdout**. Do not log the secret to stderr, SKILL examples, or fixtures. Prefer storing with `genos auth token` (stdin); do not auto-save.
 - `genos auth token-revoke <tokenID> --yes` revokes a PAT (204).
 - `genos rcon public-credential <serverID>` reveals the public RCON password once (`POST …/public-rcon/credential`). Genos will not show it again. `genos rcon public-credential <serverID> --rotate --yes` rotates (destructive; `--yes` required).

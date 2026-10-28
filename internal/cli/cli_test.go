@@ -1713,8 +1713,23 @@ func TestMeDashboardCatalog(t *testing.T) {
 	if code := Run([]string{"me"}, opts); code != 0 {
 		t.Fatalf("me exit %d stderr %s", code, stderr.String())
 	}
+	gotMe := stdout.String()
+	if !strings.Contains(gotMe, "ID      CLERK USER  SESSION  EMAIL          ADMIN") {
+		t.Fatalf("me table header %q", gotMe)
+	}
+	if !strings.Contains(gotMe, "user-1  clerk_1     sess     a@example.com  false") {
+		t.Fatalf("me table row %q", gotMe)
+	}
+	if strings.Contains(gotMe, `"clerkUserID"`) {
+		t.Fatalf("me default is JSON %q", gotMe)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"me", "--json"}, opts); code != 0 {
+		t.Fatalf("me --json exit %d stderr %s", code, stderr.String())
+	}
 	if !strings.Contains(stdout.String(), `"clerkUserID": "clerk_1"`) {
-		t.Fatalf("me stdout %q", stdout.String())
+		t.Fatalf("me json stdout %q", stdout.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
@@ -1729,8 +1744,20 @@ func TestMeDashboardCatalog(t *testing.T) {
 	if code := Run([]string{"catalog"}, opts); code != 0 {
 		t.Fatalf("catalog exit %d stderr %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"factorio"`) {
-		t.Fatalf("catalog stdout %q", stdout.String())
+	gotCatalog := stdout.String()
+	if !strings.Contains(gotCatalog, "ID        NAME") || !strings.Contains(gotCatalog, "factorio  Factorio") {
+		t.Fatalf("catalog table %q", gotCatalog)
+	}
+	if strings.Contains(gotCatalog, `"games"`) {
+		t.Fatalf("catalog default is JSON %q", gotCatalog)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"catalog", "--json"}, opts); code != 0 {
+		t.Fatalf("catalog --json exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"id": "factorio"`) {
+		t.Fatalf("catalog json stdout %q", stdout.String())
 	}
 }
 
@@ -1917,7 +1944,7 @@ func TestAuthTokensCreateRevoke(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/tokens":
-			_, _ = io.WriteString(w, `{"tokens":[{"id":"tok-1","tokenPrefix":"genos_abc","name":"laptop"}]}`)
+			_, _ = io.WriteString(w, `{"tokens":[{"id":"tok-1","tokenPrefix":"genos_abc","name":"laptop","clientName":"genos","machineName":"box","createdAt":"2026-01-02T03:04:05Z","lastUsedAt":"2026-01-03T03:04:05Z"}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/tokens":
 			w.WriteHeader(http.StatusCreated)
 			_, _ = io.WriteString(w, `{"token":{"id":"tok-2","tokenPrefix":"genos_xyz","name":"ci"},"secret":"genos_xyz_PLAINTEXT_ONCE"}`)
@@ -1933,8 +1960,23 @@ func TestAuthTokensCreateRevoke(t *testing.T) {
 	if code := Run([]string{"auth", "tokens"}, opts); code != 0 {
 		t.Fatalf("tokens exit %d stderr %s", code, stderr.String())
 	}
+	gotTokens := stdout.String()
+	if !strings.Contains(gotTokens, "ID     PREFIX     NAME    CLIENT  MACHINE  CREATED               LAST USED             EXPIRES  REVOKED") {
+		t.Fatalf("tokens table header %q", gotTokens)
+	}
+	if !strings.Contains(gotTokens, "tok-1  genos_abc  laptop  genos   box      2026-01-02T03:04:05Z  2026-01-03T03:04:05Z") {
+		t.Fatalf("tokens table row %q", gotTokens)
+	}
+	if strings.Contains(gotTokens, `"tokenPrefix"`) {
+		t.Fatalf("tokens default is JSON %q", gotTokens)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"auth", "tokens", "--json"}, opts); code != 0 {
+		t.Fatalf("tokens --json exit %d stderr %s", code, stderr.String())
+	}
 	if !strings.Contains(stdout.String(), `"tokenPrefix": "genos_abc"`) {
-		t.Fatalf("tokens stdout %q", stdout.String())
+		t.Fatalf("tokens json stdout %q", stdout.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
@@ -1964,6 +2006,36 @@ func TestAuthTokensCreateRevoke(t *testing.T) {
 	}
 	if !strings.Contains(createBody, `"name":"ci"`) || !strings.Contains(createBody, `"clientName":"genos-cli"`) || !strings.Contains(createBody, `"machineName":"box"`) {
 		t.Fatalf("create body %s", createBody)
+	}
+}
+
+func TestAuthTokensAndCatalogEmptyTables(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/auth/tokens":
+			_, _ = io.WriteString(w, `{"tokens":[]}`)
+		case "/api/v1/catalog":
+			_, _ = io.WriteString(w, `{"games":[]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"auth", "tokens"}, opts); code != 0 {
+		t.Fatalf("tokens exit %d stderr %s", code, stderr.String())
+	}
+	if stdout.String() != "No tokens.\n" {
+		t.Fatalf("tokens empty %q", stdout.String())
+	}
+	stdout.Reset()
+	if code := Run([]string{"catalog"}, opts); code != 0 {
+		t.Fatalf("catalog exit %d stderr %s", code, stderr.String())
+	}
+	if stdout.String() != "No games.\n" {
+		t.Fatalf("catalog empty %q", stdout.String())
 	}
 }
 

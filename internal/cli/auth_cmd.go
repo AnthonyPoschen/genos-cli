@@ -60,14 +60,17 @@ func newAuthStatusCmd(r *runner) *cobra.Command {
 }
 
 func newAuthTokensCmd(r *runner) *cobra.Command {
-	return &cobra.Command{
+	var asJSON bool
+	cmd := &cobra.Command{
 		Use:   "tokens",
 		Short: "List personal access token metadata",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return codeErr(r.authTokens(nil))
+			return codeErr(r.authTokens(asJSON))
 		},
 	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Print JSON")
+	return cmd
 }
 
 func newAuthTokenCreateCmd(r *runner) *cobra.Command {

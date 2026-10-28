@@ -111,11 +111,11 @@ genos schema <gameID>
 
 ### Awareness
 
-`me`, `dashboard`, `catalog`, and `schema <gameID>` (management schema; former `management-schema` alias dropped).
+`me` prints a headered account table (ID, CLERK USER, SESSION, EMAIL, ADMIN). `catalog` prints a headered game table (ID, NAME), or `No games.` when empty. Both accept `--json` for the API body. `dashboard` and `schema <gameID>` still print JSON (management schema; former `management-schema` alias dropped).
 
 ### Auth
 
-`auth login`, `auth token` (stdin), `auth status`, `auth tokens`, `auth token-create`, `auth token-revoke --yes` — unchanged behavior.
+`auth login`, `auth token` (stdin), `auth status`, `auth token-create`, `auth token-revoke --yes` — unchanged behavior. `auth tokens` prints a headered metadata table (no secret), or `No tokens.` when empty. `--json` prints `{"tokens":[…]}`.
 
 **Files not released:** no `files` command. Save workflows use `genos server saves …` / `genos profile saves …`.
 
