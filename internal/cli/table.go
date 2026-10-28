@@ -19,7 +19,7 @@ func WriteTable(out io.Writer, headers []string, rows [][]string) {
 
 // WriteEmpty writes a clear empty-list message on stdout-style writers.
 func WriteEmpty(out io.Writer, msg string) {
-	fmt.Fprintln(out, msg)
+	_, _ = fmt.Fprintln(out, msg)
 }
 
 func writeTableRow(w io.Writer, cols []string) {

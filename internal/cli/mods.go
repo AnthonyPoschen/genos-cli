@@ -25,50 +25,6 @@ var (
 	profileModsTarget = modsTarget{kind: "profiles", noun: "profile", prefix: "profile mods"}
 )
 
-func (r *runner) mods(args []string) int {
-	return r.modsDispatch(serverModsTarget, args)
-}
-
-func (r *runner) profilesMods(args []string) int {
-	return r.modsDispatch(profileModsTarget, args)
-}
-
-func (r *runner) modsDispatch(target modsTarget, args []string) int {
-	if len(args) == 0 {
-		return r.usage(target.prefix + " requires a subcommand")
-	}
-	switch args[0] {
-	case "list":
-		return r.modsList(target, args[1:])
-	case "search":
-		return r.modsSearch(target, args[1:])
-	case "show":
-		return r.modsShow(target, args[1:])
-	case "credentials":
-		return r.modsCredentials(target, args[1:])
-	case "credentials-clear":
-		return r.modsCredentialsClear(target, args[1:])
-	case "stage":
-		return r.modsStage(target, args[1:])
-	case "unstage":
-		return r.modsUnstage(target, args[1:])
-	case "discard":
-		return r.modsDiscard(target, args[1:])
-	case "apply":
-		return r.modsApply(target, args[1:])
-	case "draft":
-		return r.modsDraft(target, args[1:])
-	case "import":
-		return r.modsImport(target, args[1:])
-	case "draft-apply":
-		return r.modsDraftApply(target, args[1:])
-	case "-h", "--help":
-		return r.usage("")
-	default:
-		return r.usage(fmt.Sprintf("unknown %s subcommand %q", target.prefix, args[0]))
-	}
-}
-
 func (r *runner) modsList(target modsTarget, args []string) int {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage(target.prefix + " list requires a " + target.noun + " id")
@@ -162,7 +118,9 @@ func (r *runner) modsShow(target modsTarget, args []string) int {
 
 func (r *runner) readProviderToken() (string, error) {
 	if r.terminal() {
-		fmt.Fprintln(r.err, "Paste the provider token and press enter.")
+		if _, err := fmt.Fprintln(r.err, "Paste the provider token and press enter."); err != nil {
+			return "", err
+		}
 	}
 	payload, err := io.ReadAll(io.LimitReader(r.in, 16<<10+1))
 	if err != nil {
@@ -180,7 +138,9 @@ func (r *runner) readProviderToken() (string, error) {
 
 func (r *runner) modsCredentials(target modsTarget, args []string) int {
 	if tokenFlagValue(args) {
-		fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token")
+		if _, err := fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token"); err != nil {
+			return r.fail(err)
+		}
 		return 2
 	}
 	rest, flags, err := splitModsFlags(args, map[string]bool{

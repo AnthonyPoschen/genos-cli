@@ -29,7 +29,7 @@ func secretServiceGet(attributes map[string]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer svc.Close(session)
+	defer func() { _ = svc.Close(session) }()
 	if err := svc.Unlock(results[0]); err != nil {
 		return "", err
 	}
@@ -49,7 +49,7 @@ func secretServiceSet(label string, attributes map[string]string, secret string)
 	if err != nil {
 		return err
 	}
-	defer svc.Close(session)
+	defer func() { _ = svc.Close(session) }()
 	collection := svc.GetLoginCollection()
 	if err := svc.Unlock(collection.Path()); err != nil {
 		return err

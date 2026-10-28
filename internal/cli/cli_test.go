@@ -1308,7 +1308,7 @@ func TestModsDiscardAndCredentials(t *testing.T) {
 		}
 	}
 
-	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts, _, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
 	if code := Run([]string{"server", "mods", "discard", "srv-1", "--expected-setup", "setup-a"}, opts); code != 0 {
 		t.Fatalf("discard exit %d stderr %s", code, stderr.String())
 	}
@@ -1417,8 +1417,8 @@ func TestSavesExportWaitAndOutput(t *testing.T) {
 func TestSavesExportFailedExitsNonZero(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPost:
+		switch r.Method {
+		case http.MethodPost:
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(w, `{"export":{"id":"exp-9","serverID":"srv-1","setupID":"setup-a","gameID":"factorio","status":"pending","progressPercent":0,"requestedAt":"2026-01-02T03:04:05Z","expiresAt":"2026-01-02T03:19:05Z"}}`)
 		default:
@@ -1916,8 +1916,8 @@ func TestSetupCopyStartWaitSuccessAndFail(t *testing.T) {
 	t.Run("fail", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			switch {
-			case r.Method == http.MethodPost:
+			switch r.Method {
+			case http.MethodPost:
 				w.WriteHeader(http.StatusAccepted)
 				_, _ = io.WriteString(w, `{"copy":{"id":"copy-2","status":"pending","progressPercent":0}}`)
 			default:
@@ -2196,7 +2196,7 @@ func TestPublicRCONRevealAndRotateRequiresYes(t *testing.T) {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 
-	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts, _, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
 	if code := Run([]string{"rcon", "public-credential", "srv-1", "--rotate", "--yes"}, opts); code != 0 {
 		t.Fatalf("rotate exit %d stderr %s", code, stderr.String())
 	}
@@ -2294,12 +2294,12 @@ func TestModsDraftImportDraftApplyAutofill(t *testing.T) {
 	if err := os.WriteFile(listPath, []byte(`{"mods":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts, _, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
 	if code := Run([]string{"server", "mods", "import", "srv-1", "--file", listPath}, opts); code != 0 {
 		t.Fatalf("import exit %d stderr %s", code, stderr.String())
 	}
 
-	opts, stdout, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
+	opts, _, stderr = testOptions(t.TempDir(), server.URL, testToken, nil)
 	if code := Run([]string{"server", "mods", "draft-apply", "srv-1"}, opts); code != 0 {
 		t.Fatalf("draft-apply exit %d stderr %s", code, stderr.String())
 	}

@@ -13,22 +13,6 @@ import (
 	"github.com/AnthonyPoschen/genos-cli/internal/apiclient"
 )
 
-func (r *runner) config(args []string) int {
-	if len(args) == 0 {
-		return r.usage("config requires get or put")
-	}
-	switch args[0] {
-	case "get":
-		return r.configGet(args[1:])
-	case "put":
-		return r.configPut(args[1:])
-	case "-h", "--help":
-		return r.usage("")
-	default:
-		return r.usage(fmt.Sprintf("unknown config subcommand %q", args[0]))
-	}
-}
-
 func (r *runner) configGet(args []string) int {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("config get requires a server id")
@@ -113,7 +97,9 @@ func (r *runner) printJSON(value any) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintln(r.out, string(encoded))
+	if _, err := fmt.Fprintln(r.out, string(encoded)); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 

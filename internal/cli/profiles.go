@@ -11,34 +11,6 @@ import (
 	"github.com/AnthonyPoschen/genos-cli/internal/apiclient"
 )
 
-func (r *runner) profiles(args []string) int {
-	if len(args) == 0 {
-		return r.profilesList(nil)
-	}
-	switch args[0] {
-	case "list":
-		return r.profilesList(args[1:])
-	case "games":
-		return r.profilesGames(args[1:])
-	case "create":
-		return r.profilesCreate(args[1:])
-	case "rename":
-		return r.profilesRename(args[1:])
-	case "delete":
-		return r.profilesDelete(args[1:])
-	case "config":
-		return r.profilesConfig(args[1:])
-	case "mods":
-		return r.profilesMods(args[1:])
-	case "saves":
-		return r.profilesSaves(args[1:])
-	case "-h", "--help":
-		return r.usage("")
-	default:
-		return r.usage(fmt.Sprintf("unknown profiles subcommand %q", args[0]))
-	}
-}
-
 func (r *runner) profilesList(args []string) int {
 	if len(args) != 0 {
 		return r.usage("profiles list takes no arguments")
@@ -66,8 +38,12 @@ func (r *runner) profilesList(args []string) int {
 		}
 		WriteTable(r.out, []string{"ID", "NAME", "GAME", "SERVER", "SELECTED"}, rows)
 	}
-	fmt.Fprintln(r.out)
-	fmt.Fprintf(r.out, "Capacity: %d/%d\n", dashboard.ProfileCapacity.Used, dashboard.ProfileCapacity.Limit)
+	if _, err := fmt.Fprintln(r.out); err != nil {
+		return r.fail(err)
+	}
+	if _, err := fmt.Fprintf(r.out, "Capacity: %d/%d\n", dashboard.ProfileCapacity.Used, dashboard.ProfileCapacity.Limit); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 
@@ -185,22 +161,6 @@ func (r *runner) profilesDelete(args []string) int {
 		return r.fail(err)
 	}
 	return r.printJSON(result)
-}
-
-func (r *runner) profilesConfig(args []string) int {
-	if len(args) == 0 {
-		return r.usage("profiles config requires get or put")
-	}
-	switch args[0] {
-	case "get":
-		return r.profilesConfigGet(args[1:])
-	case "put":
-		return r.profilesConfigPut(args[1:])
-	case "-h", "--help":
-		return r.usage("")
-	default:
-		return r.usage(fmt.Sprintf("unknown profiles config subcommand %q", args[0]))
-	}
 }
 
 func (r *runner) profilesConfigGet(args []string) int {

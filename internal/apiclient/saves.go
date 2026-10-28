@@ -331,7 +331,7 @@ func (c *Client) UploadSaveArchive(ctx context.Context, uploadURL, contentType s
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("save import upload failed with status %d", resp.StatusCode)
@@ -356,7 +356,7 @@ func (c *Client) DownloadToFile(ctx context.Context, downloadURL, destPath strin
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("save export download failed with status %d", resp.StatusCode)
@@ -365,7 +365,7 @@ func (c *Client) DownloadToFile(ctx context.Context, downloadURL, destPath strin
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if _, err := io.Copy(file, resp.Body); err != nil {
 		return err
 	}

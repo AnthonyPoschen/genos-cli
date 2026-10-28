@@ -99,7 +99,9 @@ func newModsCredentialsCmd(r *runner, target modsTarget, idName string) *cobra.C
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flagChanged(cmd, "token") {
-				fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token")
+				if _, err := fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token"); err != nil {
+					return err
+				}
 				return codeErr(2)
 			}
 			rebuilt := append([]string{}, args...)
