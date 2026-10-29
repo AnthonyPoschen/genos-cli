@@ -41,8 +41,12 @@ func (r *runner) setups(args []string) int {
 		WriteTable(r.out, []string{"ID", "NAME", "GAME", "SELECTED"}, rows)
 	}
 	if len(chooser.CreatableGames) > 0 {
-		fmt.Fprintln(r.out)
-		fmt.Fprintln(r.out, "Creatable games:")
+		if _, err := fmt.Fprintln(r.out); err != nil {
+			return r.fail(err)
+		}
+		if _, err := fmt.Fprintln(r.out, "Creatable games:"); err != nil {
+			return r.fail(err)
+		}
 		rows := make([][]string, 0, len(chooser.CreatableGames))
 		for _, game := range chooser.CreatableGames {
 			rows = append(rows, []string{game.ID, game.Name})
@@ -82,7 +86,9 @@ func (r *runner) selectSetup(args []string) int {
 	if err := client.SelectSetup(ctx, rest[0], rest[1], expectedID); err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintf(r.out, "selected %s for %s\n", rest[1], rest[0])
+	if _, err := fmt.Fprintf(r.out, "selected %s for %s\n", rest[1], rest[0]); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 
@@ -113,7 +119,9 @@ func (r *runner) unloadSetup(args []string) int {
 	if err := client.UnloadSetup(ctx, rest[0], expectedID); err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintf(r.out, "unloaded setup for %s\n", rest[0])
+	if _, err := fmt.Fprintf(r.out, "unloaded setup for %s\n", rest[0]); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 

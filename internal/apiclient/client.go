@@ -347,7 +347,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, idempote
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, resp.StatusCode, err
@@ -996,7 +996,6 @@ func (c *Client) applyMod(ctx context.Context, ownerKind, ownerID, expectedSetup
 	}
 	return decodeModsPayload(data)
 }
-
 
 // DraftRevision returns collection.draft.revision when present and >= 1.
 func (s SetupModState) DraftRevision() (int64, bool) {

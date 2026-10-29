@@ -33,38 +33,6 @@ var (
 	profileSavesTarget = savesTarget{kind: "profiles", noun: "profile", prefix: "profile saves"}
 )
 
-func (r *runner) saves(args []string) int {
-	return r.savesDispatch(serverSavesTarget, args)
-}
-
-func (r *runner) profilesSaves(args []string) int {
-	return r.savesDispatch(profileSavesTarget, args)
-}
-
-func (r *runner) savesDispatch(target savesTarget, args []string) int {
-	if len(args) == 0 {
-		return r.usage(target.prefix + " requires a subcommand")
-	}
-	switch args[0] {
-	case "export":
-		return r.savesExport(target, args[1:])
-	case "export-status":
-		return r.savesExportStatus(target, args[1:])
-	case "import":
-		return r.savesImport(target, args[1:])
-	case "import-status":
-		return r.savesImportStatus(target, args[1:])
-	case "import-validate":
-		return r.savesImportValidate(target, args[1:])
-	case "import-replace":
-		return r.savesImportReplace(target, args[1:])
-	case "-h", "--help":
-		return r.usage("")
-	default:
-		return r.usage(fmt.Sprintf("unknown %s subcommand %q", target.prefix, args[0]))
-	}
-}
-
 func (r *runner) savesExport(target savesTarget, args []string) int {
 	rest, flags, err := parseSavesFlags(args, map[string]bool{
 		"--interval": true, "--timeout": true, "--output": true,
@@ -102,7 +70,7 @@ func (r *runner) savesExport(target savesTarget, args []string) int {
 
 	deadline := time.Now().Add(timeout)
 	export, err = waitSaveExportFor(ctx, client, target, rest[0], export.ID, interval, deadline, r.sleep, func(current apiclient.SaveExport) {
-		fmt.Fprintf(r.err, "genos: export %s %s %d%%\n", current.ID, current.Status, current.ProgressPercent)
+		_, _ = fmt.Fprintf(r.err, "genos: export %s %s %d%%\n", current.ID, current.Status, current.ProgressPercent)
 	})
 	if err != nil {
 		return r.fail(err)
@@ -112,7 +80,7 @@ func (r *runner) savesExport(target savesTarget, args []string) int {
 		return r.fail(fmt.Errorf("save export %s", export.Status))
 	}
 	if export.Status == "succeeded" && export.DownloadURL != "" {
-		fmt.Fprintf(r.err, "genos: downloadURL %s\n", export.DownloadURL)
+		_, _ = fmt.Fprintf(r.err, "genos: downloadURL %s\n", export.DownloadURL)
 	}
 	if out := flags.values["--output"]; out != "" {
 		if export.DownloadURL == "" {
@@ -121,7 +89,7 @@ func (r *runner) savesExport(target savesTarget, args []string) int {
 		if err := client.DownloadToFile(ctx, export.DownloadURL, out); err != nil {
 			return r.fail(err)
 		}
-		fmt.Fprintf(r.err, "genos: wrote %s\n", out)
+		_, _ = fmt.Fprintf(r.err, "genos: wrote %s\n", out)
 	}
 	return r.printJSON(export)
 }
@@ -220,7 +188,7 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 	if uploadErr != nil {
 		return r.fail(uploadErr)
 	}
-	fmt.Fprintf(r.err, "genos: uploaded %s (%d bytes)\n", fileName, info.Size())
+	_, _ = fmt.Fprintf(r.err, "genos: uploaded %s (%d bytes)\n", fileName, info.Size())
 
 	if !flags.bools["--wait"] {
 		if refreshed, err := getSaveImportFor(ctx, client, target, rest[0], replacement.ID); err == nil {
@@ -236,7 +204,7 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 	deadline := time.Now().Add(timeout)
 	if !apiclient.SaveImportReviewOrFailed(replacement.Status) {
 		replacement, err = waitSaveImportFor(ctx, client, target, rest[0], replacement.ID, interval, deadline, r.sleep, apiclient.SaveImportReviewOrFailed, func(current apiclient.SaveImport) {
-			fmt.Fprintf(r.err, "genos: import %s %s %d%%\n", current.ID, current.Status, current.ProgressPercent)
+			_, _ = fmt.Fprintf(r.err, "genos: import %s %s %d%%\n", current.ID, current.Status, current.ProgressPercent)
 		})
 		if err != nil {
 			return r.fail(err)
@@ -248,7 +216,7 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 	}
 	if !flags.bools["--yes"] {
 		_ = r.printJSON(replacement)
-		fmt.Fprintf(r.err, "genos: import is ready; re-run with --yes to replace, or: genos %s import-replace %s %s --yes\n", target.prefix, rest[0], replacement.ID)
+		_, _ = fmt.Fprintf(r.err, "genos: import is ready; re-run with --yes to replace, or: genos %s import-replace %s %s --yes\n", target.prefix, rest[0], replacement.ID)
 		return 1
 	}
 
@@ -262,7 +230,7 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 		if current.Recovery != "" {
 			line += " recovery=" + current.Recovery
 		}
-		fmt.Fprintln(r.err, line)
+		_, _ = fmt.Fprintln(r.err, line)
 	})
 	if err != nil {
 		return r.fail(err)

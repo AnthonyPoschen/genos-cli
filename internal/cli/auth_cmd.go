@@ -40,7 +40,9 @@ func newAuthTokenCmd(r *runner) *cobra.Command {
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 0 {
-				fmt.Fprintln(r.err, "genos: read the token from stdin; do not pass it as an argument")
+				if _, err := fmt.Fprintln(r.err, "genos: read the token from stdin; do not pass it as an argument"); err != nil {
+					return err
+				}
 				return codeErr(2)
 			}
 			return codeErr(r.storeStdin())

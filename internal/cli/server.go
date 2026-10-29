@@ -103,7 +103,9 @@ func (r *runner) action(action string, args []string) int {
 	if label == "" {
 		label = rest[0]
 	}
-	fmt.Fprintf(r.out, "requested %s for %s\n", action, label)
+	if _, err := fmt.Fprintf(r.out, "requested %s for %s\n", action, label); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 
@@ -131,7 +133,9 @@ func (r *runner) console(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintln(r.out, response)
+	if _, err := fmt.Fprintln(r.out, response); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 

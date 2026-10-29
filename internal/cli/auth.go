@@ -32,7 +32,9 @@ func (r *runner) login() int {
 	if err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintf(r.out, "user code: %s\n%s\n", code.UserCode, approval)
+	if _, err := fmt.Fprintf(r.out, "user code: %s\n%s\n", code.UserCode, approval); err != nil {
+		return r.fail(err)
+	}
 	if r.opts.OpenURL != nil {
 		r.opts.OpenURL(approval)
 	} else {
@@ -57,7 +59,9 @@ func (r *runner) login() int {
 
 func (r *runner) storeStdin() int {
 	if r.terminal() {
-		fmt.Fprintln(r.err, "Paste access token and press enter.")
+		if _, err := fmt.Fprintln(r.err, "Paste access token and press enter."); err != nil {
+			return r.fail(err)
+		}
 	}
 	payload, err := io.ReadAll(io.LimitReader(r.in, 16<<10+1))
 	if err != nil {
@@ -84,9 +88,13 @@ func (r *runner) storeToken(origin, dir, token string) int {
 	}
 	switch source {
 	case creds.SourceKeyring:
-		fmt.Fprintln(r.out, "token saved to keyring")
+		if _, err := fmt.Fprintln(r.out, "token saved to keyring"); err != nil {
+			return r.fail(err)
+		}
 	case creds.SourceFile:
-		fmt.Fprintln(r.out, "token saved to file because no keyring was available")
+		if _, err := fmt.Fprintln(r.out, "token saved to file because no keyring was available"); err != nil {
+			return r.fail(err)
+		}
 	default:
 		return r.fail(fmt.Errorf("unknown credential store %q", source))
 	}
@@ -108,7 +116,9 @@ func (r *runner) authStatus() int {
 		}
 		return r.fail(err)
 	}
-	fmt.Fprintf(r.out, "origin: %s\nsource: %s\nprefix: %s\n", origin, resolved.Source, creds.Prefix(resolved.Token))
+	if _, err := fmt.Fprintf(r.out, "origin: %s\nsource: %s\nprefix: %s\n", origin, resolved.Source, creds.Prefix(resolved.Token)); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 
@@ -190,7 +200,9 @@ func (r *runner) authTokenCreate(args []string) int {
 	if code := r.printJSON(result); code != 0 {
 		return code
 	}
-	fmt.Fprintln(r.err, "genos: secret printed once above; store with: genos auth token  (stdin)")
+	if _, err := fmt.Fprintln(r.err, "genos: secret printed once above; store with: genos auth token  (stdin)"); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }
 
@@ -220,6 +232,8 @@ func (r *runner) authTokenRevoke(args []string) int {
 	if err := client.RevokeAccessToken(ctx, rest[0]); err != nil {
 		return r.fail(err)
 	}
-	fmt.Fprintf(r.out, "revoked %s\n", rest[0])
+	if _, err := fmt.Fprintf(r.out, "revoked %s\n", rest[0]); err != nil {
+		return r.fail(err)
+	}
 	return 0
 }

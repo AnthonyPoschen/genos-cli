@@ -10,24 +10,6 @@ import (
 	"github.com/AnthonyPoschen/genos-cli/internal/apiclient"
 )
 
-func (r *runner) setupCopy(args []string) int {
-	if len(args) == 0 {
-		return r.usage("setup-copy requires destinations, start, or status")
-	}
-	switch args[0] {
-	case "destinations":
-		return r.setupCopyDestinations(args[1:])
-	case "start":
-		return r.setupCopyStart(args[1:])
-	case "status":
-		return r.setupCopyStatus(args[1:])
-	case "-h", "--help":
-		return r.usage("")
-	default:
-		return r.usage(fmt.Sprintf("unknown setup-copy subcommand %q", args[0]))
-	}
-}
-
 func (r *runner) setupCopyDestinations(args []string) int {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return r.usage("setup-copy destinations requires a server id")
@@ -100,7 +82,7 @@ func (r *runner) setupCopyStart(args []string) int {
 	}
 	deadline := time.Now().Add(timeout)
 	copyJob, err = client.WaitSetupCopy(ctx, rest[0], copyJob.ID, interval, deadline, r.sleep, func(current apiclient.SetupCopy) {
-		fmt.Fprintf(r.err, "genos: setup-copy %s %s %d%%\n", current.ID, current.Status, current.ProgressPercent)
+		_, _ = fmt.Fprintf(r.err, "genos: setup-copy %s %s %d%%\n", current.ID, current.Status, current.ProgressPercent)
 	})
 	if err != nil {
 		return r.fail(err)

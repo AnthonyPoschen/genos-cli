@@ -49,7 +49,7 @@ func Execute(args []string, opts Options) int {
 		if errors.As(err, &exit) {
 			return exit.code
 		}
-		fmt.Fprintf(runner.err, "genos: %s\n", err)
+		_, _ = fmt.Fprintf(runner.err, "genos: %s\n", err)
 		return 2
 	}
 	return 0
@@ -148,13 +148,13 @@ func (r *runner) origin() (origin string, dir string, err error) {
 }
 
 func (r *runner) fail(err error) int {
-	fmt.Fprintf(r.err, "genos: %s\n", err)
+	_, _ = fmt.Fprintf(r.err, "genos: %s\n", err)
 	return 1
 }
 
 func (r *runner) usage(message string) int {
 	if message != "" {
-		fmt.Fprintf(r.err, "genos: %s\n", message)
+		_, _ = fmt.Fprintf(r.err, "genos: %s\n", message)
 	}
 	return 2
 }
@@ -180,14 +180,14 @@ func stdinIsTerminal(reader io.Reader) bool {
 
 func (r *runner) confirmPrompt(prompt string) bool {
 	if !r.terminal() {
-		fmt.Fprintf(r.err, "genos: %s re-run with --yes\n", prompt)
+		_, _ = fmt.Fprintf(r.err, "genos: %s re-run with --yes\n", prompt)
 		return false
 	}
-	fmt.Fprintf(r.err, "%s [y/N] ", prompt)
+	_, _ = fmt.Fprintf(r.err, "%s [y/N] ", prompt)
 	if readYes(r.in) {
 		return true
 	}
-	fmt.Fprintln(r.err, "not confirmed")
+	_, _ = fmt.Fprintln(r.err, "not confirmed")
 	return false
 }
 
@@ -287,7 +287,7 @@ func splitYes(args []string) (rest []string, yes bool, err error) {
 func markContainer(cmd *cobra.Command) *cobra.Command {
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		if len(args) > 0 {
-			fmt.Fprintf(c.ErrOrStderr(), "genos: unknown command %q for %q\n", args[0], c.CommandPath())
+			_, _ = fmt.Fprintf(c.ErrOrStderr(), "genos: unknown command %q for %q\n", args[0], c.CommandPath())
 			return &exitError{code: 2}
 		}
 		_ = c.Help()
