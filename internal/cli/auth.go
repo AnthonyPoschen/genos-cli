@@ -148,28 +148,47 @@ func (r *runner) authTokens(asJSON bool) int {
 			token.Name,
 			token.ClientName,
 			token.MachineName,
-			formatTime(token.CreatedAt),
-			formatTimePtr(token.LastUsedAt),
-			formatTimePtr(token.ExpiresAt),
-			formatTimePtr(token.RevokedAt),
+			formatDate(token.CreatedAt),
+			formatDatePtr(token.LastUsedAt),
+			formatExpiry(token.ExpiresAt, time.Now()),
+			formatDatePtr(token.RevokedAt),
 		})
 	}
 	WriteTable(r.out, []string{"ID", "PREFIX", "NAME", "CLIENT", "MACHINE", "CREATED", "LAST USED", "EXPIRES", "REVOKED"}, rows)
 	return 0
 }
 
-func formatTime(t time.Time) string {
+// formatDate renders a timestamp as a calendar day. The API has no scope
+// field on PATs; PREFIX is the non-secret identifier shown beside the name.
+func formatDate(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.UTC().Format(time.RFC3339)
+	return t.UTC().Format("2006-01-02")
 }
 
-func formatTimePtr(t *time.Time) string {
+func formatDatePtr(t *time.Time) string {
 	if t == nil {
 		return ""
 	}
-	return formatTime(*t)
+	return formatDate(*t)
+}
+
+// formatExpiry prints "never" when a token does not expire, "in Nd" while it
+// is still valid, and the calendar day once it has passed.
+func formatExpiry(t *time.Time, now time.Time) string {
+	if t == nil || t.IsZero() {
+		return "never"
+	}
+	exp := t.UTC()
+	if exp.After(now.UTC()) {
+		days := int(exp.Sub(now.UTC()).Hours() / 24)
+		if days < 1 {
+			return "in <1d"
+		}
+		return fmt.Sprintf("in %dd", days)
+	}
+	return exp.Format("2006-01-02")
 }
 
 func (r *runner) authTokenCreate(args []string) int {

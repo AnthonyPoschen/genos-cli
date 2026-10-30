@@ -115,7 +115,9 @@ genos schema <gameID>
 
 ### Auth
 
-`auth login`, `auth token` (stdin), `auth status`, `auth token-create`, `auth token-revoke --yes` — unchanged behavior. `auth tokens` prints a headered metadata table (no secret), or `No tokens.` when empty. `--json` prints `{"tokens":[…]}`.
+`auth login`, `auth token` (stdin), `auth status`, `auth token-create`, `auth token-revoke --yes` — unchanged behavior. `auth tokens` prints a headered metadata table (ID, PREFIX, NAME, CLIENT, MACHINE, CREATED, LAST USED, EXPIRES, REVOKED). Dates are `YYYY-MM-DD`. A missing expiry is `never`; a future expiry is `in Nd`. The plaintext secret is never listed. Empty list prints `No tokens.`. `--json` prints `{"tokens":[…]}` from the API metadata (unchanged).
+
+Tables are the default for `auth tokens`, `me`, and `catalog` whether or not stdout is a TTY. That matches `server list` and the other list commands, which do not check `isatty`. `--json` is the machine-readable mode.
 
 **Files not released:** no `files` command. Save workflows use `genos server saves …` / `genos profile saves …`.
 

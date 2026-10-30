@@ -64,10 +64,10 @@ func TestBinaryEndToEnd(t *testing.T) {
 	if tokensCode != 0 {
 		t.Fatalf("auth tokens exit %d stderr %s", tokensCode, tokensErr)
 	}
-	if !strings.Contains(tokensOut, "ID     PREFIX     NAME    CLIENT  MACHINE  CREATED               LAST USED             EXPIRES  REVOKED") {
+	if !strings.Contains(tokensOut, "ID     PREFIX     NAME    CLIENT  MACHINE  CREATED     LAST USED   EXPIRES  REVOKED") {
 		t.Fatalf("auth tokens table header %q", tokensOut)
 	}
-	if !strings.Contains(tokensOut, "tok-1  genos_abc  laptop  genos   box      2026-01-02T03:04:05Z  2026-01-03T03:04:05Z") {
+	if !strings.Contains(tokensOut, "tok-1  genos_abc  laptop  genos   box      2026-01-02  2026-01-03  never") {
 		t.Fatalf("auth tokens table row %q", tokensOut)
 	}
 	if strings.Contains(tokensOut, `"tokenPrefix"`) {
