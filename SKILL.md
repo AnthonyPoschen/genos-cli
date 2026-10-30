@@ -59,7 +59,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos profile copy destinations <serverID>` lists copy/transfer destinations.
 - `genos profile copy start <serverID> <setupID> --destination <serverID> --mode copy|transfer [--wait] [--interval] [--timeout]` starts a copy (202). `--wait` polls until succeeded|failed like saves; never invent success.
 - `genos profile copy status <serverID> <copyID>` prints one copy JSON.
-- `genos auth tokens` lists PAT metadata as a headered table (ID, PREFIX, NAME, CLIENT, MACHINE, CREATED, LAST USED, EXPIRES, REVOKED). `No tokens.` when the list is empty. `--json` prints `{"tokens":[…]}`.
+- `genos auth tokens` lists PAT metadata as a headered table (ID, PREFIX, NAME, CLIENT, MACHINE, CREATED, LAST USED, EXPIRES, REVOKED). Dates are `YYYY-MM-DD`; missing expiry is `never`; a future expiry is `in Nd`. No secret. `No tokens.` when the list is empty. `--json` prints `{"tokens":[…]}`. The table is the default even when stdout is not a TTY.
 - `genos auth token-create [--name N] [--client-name C] [--machine-name M]` creates a PAT and prints `token` + **secret once on stdout**. Do not log the secret to stderr, SKILL examples, or fixtures. Prefer storing with `genos auth token` (stdin); do not auto-save.
 - `genos auth token-revoke <tokenID> --yes` revokes a PAT (204).
 - `genos rcon public-credential <serverID>` reveals the public RCON password once (`POST …/public-rcon/credential`). Genos will not show it again. `genos rcon public-credential <serverID> --rotate --yes` rotates (destructive; `--yes` required).

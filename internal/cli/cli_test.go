@@ -1961,10 +1961,10 @@ func TestAuthTokensCreateRevoke(t *testing.T) {
 		t.Fatalf("tokens exit %d stderr %s", code, stderr.String())
 	}
 	gotTokens := stdout.String()
-	if !strings.Contains(gotTokens, "ID     PREFIX     NAME    CLIENT  MACHINE  CREATED               LAST USED             EXPIRES  REVOKED") {
+	if !strings.Contains(gotTokens, "ID     PREFIX     NAME    CLIENT  MACHINE  CREATED     LAST USED   EXPIRES  REVOKED") {
 		t.Fatalf("tokens table header %q", gotTokens)
 	}
-	if !strings.Contains(gotTokens, "tok-1  genos_abc  laptop  genos   box      2026-01-02T03:04:05Z  2026-01-03T03:04:05Z") {
+	if !strings.Contains(gotTokens, "tok-1  genos_abc  laptop  genos   box      2026-01-02  2026-01-03  never") {
 		t.Fatalf("tokens table row %q", gotTokens)
 	}
 	if strings.Contains(gotTokens, `"tokenPrefix"`) {
@@ -2036,6 +2036,73 @@ func TestAuthTokensAndCatalogEmptyTables(t *testing.T) {
 	}
 	if stdout.String() != "No games.\n" {
 		t.Fatalf("catalog empty %q", stdout.String())
+	}
+}
+
+func TestAuthTokensReadableTimesAndNoSecret(t *testing.T) {
+	expires := time.Now().UTC().Add(29*24*time.Hour + 12*time.Hour)
+	body, err := json.Marshal(map[string]any{
+		"tokens": []map[string]any{
+			{
+				"id":          "tok-old",
+				"tokenPrefix": "genos_old",
+				"name":        "old",
+				"clientName":  "genos",
+				"machineName": "box",
+				"createdAt":   "2020-05-01T08:00:00Z",
+				"expiresAt":   "2020-06-01T00:00:00Z",
+				"revokedAt":   "2020-05-20T00:00:00Z",
+				"secret":      "genos_old_SECRETVALUE",
+			},
+			{
+				"id":          "tok-live",
+				"tokenPrefix": "genos_new",
+				"name":        "live",
+				"clientName":  "genos",
+				"machineName": "box",
+				"createdAt":   "2026-01-02T03:04:05Z",
+				"expiresAt":   expires.Format(time.RFC3339),
+				"secret":      "genos_new_SECRETVALUE",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/v1/auth/tokens" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	opts, stdout, stderr := testOptions(t.TempDir(), server.URL, testToken, nil)
+	if code := Run([]string{"auth", "tokens"}, opts); code != 0 {
+		t.Fatalf("tokens exit %d stderr %s", code, stderr.String())
+	}
+	got := stdout.String()
+	wantTable := "" +
+		"ID        PREFIX     NAME  CLIENT  MACHINE  CREATED     LAST USED  EXPIRES     REVOKED\n" +
+		"tok-old   genos_old  old   genos   box      2020-05-01             2020-06-01  2020-05-20\n" +
+		"tok-live  genos_new  live  genos   box      2026-01-02             in 29d      \n"
+	if got != wantTable {
+		t.Fatalf("tokens table\n got: %q\nwant: %q", got, wantTable)
+	}
+	if strings.Contains(got, "SECRETVALUE") {
+		t.Fatalf("secret leaked into table %q", got)
+	}
+	stdout.Reset()
+	if code := Run([]string{"auth", "tokens", "--json"}, opts); code != 0 {
+		t.Fatalf("json exit %d stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"id": "tok-old"`) || !strings.Contains(stdout.String(), `"expiresAt": "2020-06-01T00:00:00Z"`) {
+		t.Fatalf("json stdout %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "SECRETVALUE") {
+		t.Fatalf("secret re-emitted in json mode %q", stdout.String())
 	}
 }
 
