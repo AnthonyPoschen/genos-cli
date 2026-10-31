@@ -8,9 +8,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// readCommands are the leaf commands (path below "genos") that only read and
-// take --json. Commands that already print JSON accept it as a no-op so an
-// agent can pass --json to any read without knowing which ones print tables.
+// Every runnable command (path below "genos") is in exactly one of
+// readCommands or writeCommands; TestCommandClassification fails CI on an
+// unclassified, double-classified or stale entry.
+//
+// readCommands only read and take --json. Commands that already print JSON
+// accept it as a no-op so an agent can pass --json to any read without
+// knowing which ones print tables.
 var readCommands = []string{
 	"server list",
 	"server status",
@@ -42,6 +46,56 @@ var readCommands = []string{
 	"commands",
 }
 
+// writeCommands change state, reveal or create a secret, or store credentials.
+var writeCommands = []string{
+	"auth login",
+	"auth token",
+	"auth token-create",
+	"auth token-revoke",
+	"profile config put",
+	"profile copy start",
+	"profile create",
+	"profile delete",
+	"profile mods apply",
+	"profile mods credentials",
+	"profile mods credentials-clear",
+	"profile mods discard",
+	"profile mods draft",
+	"profile mods draft-apply",
+	"profile mods import",
+	"profile mods stage",
+	"profile mods unstage",
+	"profile rename",
+	"profile saves export",
+	"profile saves import",
+	"profile saves import-replace",
+	"profile saves import-validate",
+	"rcon broadcast",
+	"rcon public-credential",
+	"rcon send",
+	"server config put",
+	"server force-stop",
+	"server mods apply",
+	"server mods credentials",
+	"server mods credentials-clear",
+	"server mods discard",
+	"server mods draft",
+	"server mods draft-apply",
+	"server mods import",
+	"server mods stage",
+	"server mods unstage",
+	"server order",
+	"server profile select",
+	"server profile unload",
+	"server rename",
+	"server restart",
+	"server saves export",
+	"server saves import",
+	"server saves import-replace",
+	"server saves import-validate",
+	"server start",
+	"server stop"}
+
 const readAnnotation = "genos.read"
 
 // addReadJSONFlags marks each read command and gives it --json bound to
@@ -56,6 +110,8 @@ func addReadJSONFlags(root *cobra.Command, r *runner) {
 			cmd.Annotations = map[string]string{}
 		}
 		cmd.Annotations[readAnnotation] = "true"
+		// All read commands share r.jsonOut: one process runs one command,
+		// so only the invoked command's flag can set it.
 		if cmd.Flags().Lookup("json") == nil {
 			cmd.Flags().BoolVar(&r.jsonOut, "json", false, "Print JSON")
 		}
@@ -71,13 +127,14 @@ type commandFlag struct {
 }
 
 type commandInfo struct {
-	Path        string        `json:"path"`
-	Use         string        `json:"use"`
-	Short       string        `json:"short"`
-	ReadOnly    bool          `json:"read_only"`
-	JSON        bool          `json:"json"`
-	RequiresYes bool          `json:"requires_yes"`
-	Flags       []commandFlag `json:"flags"`
+	Path       string        `json:"path"`
+	Use        string        `json:"use"`
+	Short      string        `json:"short"`
+	ReadOnly   bool          `json:"read_only"`
+	Mutating   bool          `json:"mutating"`
+	JSON       bool          `json:"json"`
+	HasYesFlag bool          `json:"has_yes_flag"`
+	Flags      []commandFlag `json:"flags"`
 }
 
 func newCommandsCmd(r *runner) *cobra.Command {
@@ -130,6 +187,7 @@ func describeCommand(cmd *cobra.Command) commandInfo {
 		ReadOnly: cmd.Annotations[readAnnotation] == "true",
 		Flags:    []commandFlag{},
 	}
+	info.Mutating = !info.ReadOnly
 	collect := func(f *pflag.Flag) {
 		if f.Hidden || f.Name == "help" {
 			return
@@ -138,7 +196,7 @@ func describeCommand(cmd *cobra.Command) commandInfo {
 		case "json":
 			info.JSON = true
 		case "yes":
-			info.RequiresYes = true
+			info.HasYesFlag = true
 		}
 		info.Flags = append(info.Flags, commandFlag{
 			Name:      f.Name,

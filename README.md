@@ -89,7 +89,7 @@ genos schema <gameID>
 
 Every read command accepts `--json`: stdout is then exactly one JSON object and nothing else. Commands that print a table by default switch to JSON (`server list` → `{"servers":[…]}`, `server status` → the server object, `server profile list` → the setup chooser body, `profile list` → `{"profiles":[…],"profileCapacity":{…}}`, `auth status` → `{"origin","source","prefix"}`, plus `me`, `catalog`, `auth tokens`). Commands that already print JSON (`dashboard`, `schema`, `server plan`, `config get`, mods `list/search/show`, saves `*-status`, `profile games`, `profile copy destinations/status`, `rcon broadcast-status`) accept `--json` as a no-op, so an agent can always pass it.
 
-`genos commands --json` prints `{"commands":[…]}`, one entry per runnable command, generated from the command tree: `path`, `use`, `short`, `read_only`, `json`, `requires_yes` (destructive; prompts unless `--yes`), and `flags` (`name`, `type`, `default`, `usage`). `genos commands` without `--json` prints a COMMAND/DESCRIPTION table.
+`genos commands --json` prints `{"commands":[…]}`, one entry per runnable command, generated from the command tree: `path`, `use`, `short`, `read_only`, `mutating` (always `!read_only`), `json`, `has_yes_flag`, and `flags` (`name`, `type`, `default`, `usage`). `has_yes_flag` only says the command has a `--yes` confirmation flag. Lacking `--yes` does **not** mean a command is safe: `rcon send`, `server config put` and `auth token-create` change state without one. Use `mutating` to decide. `genos commands` without `--json` prints a COMMAND/DESCRIPTION table.
 
 ## Exit codes, JSON errors, and no-input mode
 

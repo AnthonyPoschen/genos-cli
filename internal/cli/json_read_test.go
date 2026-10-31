@@ -106,6 +106,33 @@ func TestEveryReadCommandAcceptsJSON(t *testing.T) {
 	}
 }
 
+// TestCommandClassification walks the real command tree so a new command
+// fails CI until it is added to readCommands or writeCommands.
+func TestCommandClassification(t *testing.T) {
+	r := newRunner(Options{})
+	live := map[string]bool{}
+	for _, c := range commandCatalog(newRootCmd(r)) {
+		live[c.Path] = true
+	}
+	seen := map[string]string{}
+	for list, paths := range map[string][]string{"read": readCommands, "write": writeCommands} {
+		for _, path := range paths {
+			if prev, ok := seen[path]; ok {
+				t.Errorf("%q classified twice (%s, %s)", path, prev, list)
+			}
+			seen[path] = list
+			if !live[path] {
+				t.Errorf("%q in %s list but no such runnable command", path, list)
+			}
+		}
+	}
+	for path := range live {
+		if _, ok := seen[path]; !ok {
+			t.Errorf("%q is not classified: add it to readCommands or writeCommands", path)
+		}
+	}
+}
+
 func TestCommandsJSON(t *testing.T) {
 	opts, stdout, stderr := testOptions(t.TempDir(), "", "", nil)
 	if code := Run([]string{"commands", "--json"}, opts); code != 0 {
@@ -121,19 +148,17 @@ func TestCommandsJSON(t *testing.T) {
 	for _, c := range catalog.Commands {
 		byPath[c.Path] = c
 	}
-	reads := map[string]bool{}
 	for _, path := range readCommands {
-		reads[path] = true
-		if c, ok := byPath[path]; !ok || !c.ReadOnly || !c.JSON {
+		if c := byPath[path]; !c.ReadOnly || c.Mutating || !c.JSON {
 			t.Fatalf("read command %q entry %+v", path, c)
 		}
 	}
-	for path, c := range byPath {
-		if c.ReadOnly != reads[path] {
-			t.Fatalf("%q read_only %v", path, c.ReadOnly)
+	for _, path := range writeCommands {
+		if c := byPath[path]; c.ReadOnly || !c.Mutating {
+			t.Fatalf("write command %q entry %+v", path, c)
 		}
 	}
-	if c := byPath["server stop"]; !c.RequiresYes || c.ReadOnly {
+	if c := byPath["server stop"]; !c.HasYesFlag || !c.Mutating {
 		t.Fatalf("server stop %+v", c)
 	}
 	if _, ok := byPath["server"]; ok {
