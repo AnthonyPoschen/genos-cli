@@ -122,6 +122,7 @@ type runner struct {
 	env  Env
 
 	jsonErrors bool
+	jsonOut    bool
 	noInput    bool
 }
 
@@ -265,7 +266,9 @@ func newRootCmd(r *runner) *cobra.Command {
 		newMeCmd(r),
 		newDashboardCmd(r),
 		newSchemaCmd(r),
+		newCommandsCmd(r),
 	)
+	addReadJSONFlags(root, r)
 	return root
 }
 

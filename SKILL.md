@@ -21,6 +21,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 - `genos server profile list <serverID>` prints a headered table of ID, NAME, GAME, SELECTED (`*` on the selected row), then a separate `Creatable games:` section from `creatableGames` (not mixed as fake data rows).
 - `genos server profile select <serverID> <setupID> [--expected <id>]` selects a profile. Without `--expected`, GETs setups and uses `selectedSetupID`.
 - `genos server profile unload <serverID> [--expected <id>]` unloads the selected profile (same `--expected` default).
+- Every read command takes `--json` (stdout is one JSON object). `genos commands --json` lists every command with its flags, `read_only` and `requires_yes`; prefer it over this list when they differ.
 - `genos server rename <serverID> <name>` renames a server (JSON). API must confirm Stopped; never invent success.
 - `genos rcon broadcast <serverID> [--message <text>]` POSTs an in-game notice (JSON).
 - `genos rcon broadcast-status <serverID> [--message <text>]` GETs broadcast availability/preview (JSON).
