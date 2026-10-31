@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -99,10 +98,7 @@ func newModsCredentialsCmd(r *runner, target modsTarget, idName string) *cobra.C
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flagChanged(cmd, "token") {
-				if _, err := fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token"); err != nil {
-					return err
-				}
-				return codeErr(2)
+				return usageError("read the provider token from stdin; do not pass --token")
 			}
 			rebuilt := append([]string{}, args...)
 			rebuilt = appendFlag(rebuilt, "--username", username, flagChanged(cmd, "username"))

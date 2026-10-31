@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/AnthonyPoschen/genos-cli/internal/apiclient"
@@ -48,7 +49,8 @@ const exitCodesHelp = `Exit codes are stable; scripts and agents may branch on t
   0  success
   1  generic failure (API 5xx, validation, a declined prompt, anything else)
   2  usage error (bad arguments or flags, missing required --yes)
-  3  confirmation required: a prompt was needed but input is not interactive; re-run with --yes
+  3  confirmation required: a prompt or typed input was needed but input is not
+     interactive (--no-input); re-run with --yes, or pipe the value on stdin
   4  authentication: no token, or the API answered 401
   5  forbidden: the API answered 403
   6  not found: the API answered 404
@@ -84,6 +86,8 @@ type errorReport struct {
 	APICode    string `json:"api_code,omitempty"`
 	Hint       string `json:"hint,omitempty"`
 	ExitCode   int    `json:"exit_code"`
+
+	plain bool // text mode prints Message without the "genos: " prefix
 }
 
 func classify(err error) errorReport {
@@ -125,10 +129,49 @@ func (r *runner) report(rep errorReport) int {
 		_, _ = fmt.Fprintln(r.err, string(data))
 		return rep.ExitCode
 	}
+	if rep.plain {
+		_, _ = fmt.Fprintln(r.err, rep.Message)
+		return rep.ExitCode
+	}
 	if rep.Message != "" {
 		_, _ = fmt.Fprintf(r.err, "genos: %s\n", rep.Message)
 	}
 	return rep.ExitCode
+}
+
+func usageError(msg string) error {
+	return &cliError{code: ExitUsage, msg: msg}
+}
+
+// requireInput refuses to read a secret from a terminal under --no-input.
+// Piped (non-TTY) stdin is read as usual.
+func (r *runner) requireInput(what string) error {
+	if r.interactive() || !r.terminal() {
+		return nil
+	}
+	return &cliError{
+		code: ExitConfirmationRequired,
+		msg:  what + " would be read from the terminal, but --no-input is set; pipe it on stdin",
+		hint: "pipe the " + what + " on stdin",
+	}
+}
+
+// jsonRequested reports whether args turn on --json (--json, --json=true);
+// --json=false keeps text errors. Scanning stops at "--".
+func jsonRequested(args []string) bool {
+	on := false
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--json" {
+			on = true
+		} else if value, ok := strings.CutPrefix(arg, "--json="); ok {
+			parsed, err := strconv.ParseBool(value)
+			on = err == nil && parsed
+		}
+	}
+	return on
 }
 
 func truthy(value string) bool {

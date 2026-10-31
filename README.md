@@ -94,7 +94,7 @@ Exit codes are stable (`genos help exit-codes`):
 | 0 | ok | success |
 | 1 | failure | generic failure (API 5xx, validation, a declined prompt) |
 | 2 | usage | bad arguments or flags |
-| 3 | confirmation_required | a prompt was needed but input is not interactive; re-run with `--yes` |
+| 3 | confirmation_required | a prompt or typed secret was needed but input is not interactive; re-run with `--yes` or pipe the value on stdin |
 | 4 | auth | no token, or API 401 |
 | 5 | forbidden | API 403 |
 | 6 | not_found | API 404 |
@@ -109,9 +109,9 @@ On commands that accept `--json` (`me`, `catalog`, `auth tokens`), a failure pri
 {"error":{"code":"auth","message":"no token for https://genos.example","hint":"set GENOS_TOKEN or run genos auth token","exit_code":4}}
 ```
 
-`code` and `exit_code` are always present. `http_status` and `api_code` appear only for API errors; `hint` only when there is one. Without `--json`, errors stay `genos: <message>`.
+`code` and `exit_code` are always present. `http_status` and `api_code` appear only for API errors; `hint` only when there is one. Every error path renders through one place, so this holds for usage errors, unknown commands and help topics, refusals and `not confirmed` too. `--json=false` means text output and text errors. Without `--json`, errors stay `genos: <message>`.
 
-`--no-input` (or `GENOS_NONINTERACTIVE=1`) never prompts and never opens a browser, even on a TTY. A confirmation then needs `--yes`, or genos exits 3 without sending the action. `auth login` prints the user code and approval URL and keeps polling without opening a browser; for fully headless use set `GENOS_TOKEN`.
+`--no-input` (or `GENOS_NONINTERACTIVE=1`) never prompts and never opens a browser, even on a TTY. A confirmation then needs `--yes`, or genos exits 3 without sending the action. `auth token` and `mods credentials` exit 3 instead of prompting for a pasted secret on a terminal; piped stdin works as before. `auth login` prints the user code and approval URL and keeps polling without opening a browser; for fully headless use set `GENOS_TOKEN`.
 
 `profile list` prints a headered table (ID, NAME, GAME, SELECTED) and a separate `Creatable games:` section when present. `profile select` / `profile unload` change the selected profile (PUT/DELETE `/api/v1/servers/{id}/selected-setup`). They require the server to be confirmed Stopped on the API. Both send `expectedSelectedSetupID` for compare-and-swap. When `--expected` is omitted, genos GETs setups first and uses `selectedSetupID`. **Attach only** — create/rename/delete/config/mods/saves for profiles live under `genos profile`.
 

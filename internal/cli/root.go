@@ -39,25 +39,30 @@ type Env struct {
 // Execute runs the Cobra command tree with args (without argv0) and returns an exit code.
 func Execute(args []string, opts Options) int {
 	runner := newRunner(opts)
+	runner.jsonErrors = jsonRequested(args)
+	return runner.execute(args)
+}
+
+// execute runs one command line and renders any error in one place.
+func (r *runner) execute(args []string) int {
+	runner := r
 	cmd := newRootCmd(runner)
 	cmd.SetArgs(args)
 	cmd.SetIn(runner.in)
 	cmd.SetOut(runner.out)
 	cmd.SetErr(runner.err)
-	for _, arg := range args {
-		if arg == "--" {
-			break
-		}
-		if arg == "--json" {
-			runner.jsonErrors = true
-		}
-	}
 	if err := cmd.Execute(); err != nil {
 		var exit *exitError
 		if errors.As(err, &exit) {
 			return exit.code
 		}
-		return runner.report(errorReport{Code: exitKinds[ExitUsage], Message: err.Error(), ExitCode: int(ExitUsage)})
+		// Every other error is rendered here, so --json always gets JSON.
+		// Errors without a typed code come from cobra arg/flag parsing.
+		var typed *cliError
+		if !errors.As(err, &typed) {
+			err = usageError(err.Error())
+		}
+		return runner.fail(err)
 	}
 	return 0
 }
@@ -209,8 +214,7 @@ func (r *runner) confirmPrompt(prompt string) int {
 	if readYes(r.in) {
 		return 0
 	}
-	_, _ = fmt.Fprintln(r.err, "not confirmed")
-	return int(ExitFailure)
+	return r.report(errorReport{Code: exitKinds[ExitFailure], Message: "not confirmed", ExitCode: int(ExitFailure), plain: true})
 }
 
 func readYes(reader io.Reader) bool {
@@ -276,8 +280,7 @@ func newHelpCmd() *cobra.Command {
 			}
 			target, _, err := c.Root().Find(args)
 			if err != nil || target == nil {
-				_, _ = fmt.Fprintf(c.ErrOrStderr(), "genos: unknown help topic %q\n", strings.Join(args, " "))
-				return &exitError{code: int(ExitUsage)}
+				return usageError(fmt.Sprintf("unknown help topic %q", strings.Join(args, " ")))
 			}
 			return target.Help()
 		},
@@ -329,8 +332,7 @@ func splitYes(args []string) (rest []string, yes bool, err error) {
 func markContainer(cmd *cobra.Command) *cobra.Command {
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		if len(args) > 0 {
-			_, _ = fmt.Fprintf(c.ErrOrStderr(), "genos: unknown command %q for %q\n", args[0], c.CommandPath())
-			return &exitError{code: 2}
+			return usageError(fmt.Sprintf("unknown command %q for %q", args[0], c.CommandPath()))
 		}
 		_ = c.Help()
 		return nil
