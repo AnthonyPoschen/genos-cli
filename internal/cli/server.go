@@ -93,8 +93,10 @@ func (r *runner) action(action string, args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
-	if !decision.Send && !r.confirmPrompt(decision.Prompt) {
-		return 1
+	if !decision.Send {
+		if code := r.confirmPrompt(decision.Prompt); code != 0 {
+			return code
+		}
 	}
 	if err := client.RequestAction(ctx, rest[0], action, decision.ConfirmUnsavedProgressLoss); err != nil {
 		return r.fail(err)
@@ -150,7 +152,7 @@ func (r *runner) api() (*apiclient.Client, error) {
 	})
 	if err != nil {
 		if errors.Is(err, creds.ErrNotFound) {
-			return nil, fmt.Errorf("no token for %s", origin)
+			return nil, noTokenError(origin)
 		}
 		return nil, err
 	}

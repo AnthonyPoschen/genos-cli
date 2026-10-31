@@ -44,13 +44,20 @@ func Execute(args []string, opts Options) int {
 	cmd.SetIn(runner.in)
 	cmd.SetOut(runner.out)
 	cmd.SetErr(runner.err)
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--json" {
+			runner.jsonErrors = true
+		}
+	}
 	if err := cmd.Execute(); err != nil {
 		var exit *exitError
 		if errors.As(err, &exit) {
 			return exit.code
 		}
-		_, _ = fmt.Fprintf(runner.err, "genos: %s\n", err)
-		return 2
+		return runner.report(errorReport{Code: exitKinds[ExitUsage], Message: err.Error(), ExitCode: int(ExitUsage)})
 	}
 	return 0
 }
@@ -108,6 +115,9 @@ type runner struct {
 	out  io.Writer
 	err  io.Writer
 	env  Env
+
+	jsonErrors bool
+	noInput    bool
 }
 
 func (r *runner) getenv(key string) string {
@@ -148,15 +158,22 @@ func (r *runner) origin() (origin string, dir string, err error) {
 }
 
 func (r *runner) fail(err error) int {
-	_, _ = fmt.Fprintf(r.err, "genos: %s\n", err)
-	return 1
+	return r.report(classify(err))
 }
 
 func (r *runner) usage(message string) int {
-	if message != "" {
-		_, _ = fmt.Fprintf(r.err, "genos: %s\n", message)
+	if message == "" && !r.jsonErrors {
+		return int(ExitUsage)
 	}
-	return 2
+	if message == "" {
+		message = "usage error"
+	}
+	return r.report(errorReport{Code: exitKinds[ExitUsage], Message: message, ExitCode: int(ExitUsage)})
+}
+
+// interactive is false under --no-input or GENOS_NONINTERACTIVE, even on a TTY.
+func (r *runner) interactive() bool {
+	return !r.noInput && !truthy(r.getenv("GENOS_NONINTERACTIVE"))
 }
 
 func (r *runner) terminal() bool {
@@ -178,17 +195,22 @@ func stdinIsTerminal(reader io.Reader) bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
-func (r *runner) confirmPrompt(prompt string) bool {
-	if !r.terminal() {
-		_, _ = fmt.Fprintf(r.err, "genos: %s re-run with --yes\n", prompt)
-		return false
+// confirmPrompt returns 0 when confirmed, otherwise the exit code to return.
+func (r *runner) confirmPrompt(prompt string) int {
+	if !r.interactive() || !r.terminal() {
+		return r.report(errorReport{
+			Code:     exitKinds[ExitConfirmationRequired],
+			Message:  prompt + " re-run with --yes",
+			Hint:     "re-run with --yes",
+			ExitCode: int(ExitConfirmationRequired),
+		})
 	}
 	_, _ = fmt.Fprintf(r.err, "%s [y/N] ", prompt)
 	if readYes(r.in) {
-		return true
+		return 0
 	}
 	_, _ = fmt.Fprintln(r.err, "not confirmed")
-	return false
+	return int(ExitFailure)
 }
 
 func readYes(reader io.Reader) bool {
@@ -228,7 +250,8 @@ func newRootCmd(r *runner) *cobra.Command {
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.SetHelpCommand(&cobra.Command{Hidden: true})
+	root.PersistentFlags().BoolVar(&r.noInput, "no-input", false, "Never prompt or open a browser (also GENOS_NONINTERACTIVE=1)")
+	root.SetHelpCommand(newHelpCmd())
 	root.AddCommand(
 		newServerCmd(r),
 		newProfileCmd(r),
@@ -240,6 +263,25 @@ func newRootCmd(r *runner) *cobra.Command {
 		newSchemaCmd(r),
 	)
 	return root
+}
+
+func newHelpCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "help [command | exit-codes]",
+		Short: "Help about any command, or a topic (exit-codes)",
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 1 && args[0] == "exit-codes" {
+				_, _ = fmt.Fprint(c.OutOrStdout(), exitCodesHelp)
+				return nil
+			}
+			target, _, err := c.Root().Find(args)
+			if err != nil || target == nil {
+				_, _ = fmt.Fprintf(c.ErrOrStderr(), "genos: unknown help topic %q\n", strings.Join(args, " "))
+				return &exitError{code: int(ExitUsage)}
+			}
+			return target.Help()
+		},
+	}
 }
 
 func appendFlag(args []string, name, value string, set bool) []string {
