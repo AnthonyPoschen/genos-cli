@@ -218,6 +218,9 @@ func TestHelpExitCodes(t *testing.T) {
 	}
 }
 
+// fakeProviderToken is a placeholder, not a credential.
+const fakeProviderToken = "placeholder-not-a-real-token"
+
 func modsServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -289,7 +292,7 @@ func TestJSONEveryErrorPath(t *testing.T) {
 		{"unknown subcommand", []string{"auth", "bogus"}, false, "", ExitUsage},
 		{"unknown help topic", []string{"help", "nope"}, false, "", ExitUsage},
 		{"unknown flag", []string{"server", "status", "--nope"}, false, "", ExitUsage},
-		{"mods --token refusal", []string{"server", "mods", "credentials", "srv-1", "--token", "flag-secret"}, false, "", ExitUsage},
+		{"mods --token refusal", []string{"server", "mods", "credentials", "srv-1", "--token", fakeProviderToken}, false, "", ExitUsage},
 		{"auth token argument", []string{"auth", "token", "arg-secret"}, false, "", ExitUsage},
 		{"confirmation required", []string{"server", "stop", "srv-1"}, false, "", ExitConfirmationRequired},
 		{"not confirmed", []string{"server", "stop", "srv-1"}, true, "no\n", ExitFailure},
@@ -323,7 +326,7 @@ func TestJSONEveryErrorPath(t *testing.T) {
 			if got.Error.ExitCode != int(test.want) || got.Error.Code != exitKinds[test.want] || got.Error.Message == "" {
 				t.Fatalf("error %+v", got.Error)
 			}
-			if strings.Contains(stderr.String(), "secret") {
+			if strings.Contains(stderr.String(), "secret") || strings.Contains(stderr.String(), fakeProviderToken) {
 				t.Fatal("secret leaked")
 			}
 		})
