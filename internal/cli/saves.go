@@ -216,8 +216,8 @@ func (r *runner) savesImport(target savesTarget, args []string) int {
 	}
 	if !flags.bools["--yes"] {
 		_ = r.printJSON(replacement)
-		_, _ = fmt.Fprintf(r.err, "genos: import is ready; re-run with --yes to replace, or: genos %s import-replace %s %s --yes\n", target.prefix, rest[0], replacement.ID)
-		return 1
+		msg := fmt.Sprintf("import is ready; re-run with --yes to replace, or: genos %s import-replace %s %s --yes", target.prefix, rest[0], replacement.ID)
+		return r.report(errorReport{Code: exitKinds[ExitConfirmationRequired], Message: msg, Hint: "re-run with --yes", ExitCode: int(ExitConfirmationRequired)})
 	}
 
 	applyMods := applySaveModsFromFlags(flags)
