@@ -165,7 +165,7 @@ func TestBinaryEndToEnd(t *testing.T) {
 		"TERM=dumb",
 	}
 	badOut, badErr, badCode := runGenos(t, bin, badEnv, "me")
-	if badCode != int(ExitAuth) {
+	if badCode != 4 { // ExitAuth
 		t.Fatalf("unauthorized me exit %d stdout %q stderr %q", badCode, badOut, badErr)
 	}
 	if !strings.Contains(badErr, "unauthorized: token rejected") {
