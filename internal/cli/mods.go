@@ -117,6 +117,9 @@ func (r *runner) modsShow(target modsTarget, args []string) int {
 }
 
 func (r *runner) readProviderToken() (string, error) {
+	if err := r.requireInput("provider token"); err != nil {
+		return "", err
+	}
 	if r.terminal() {
 		if _, err := fmt.Fprintln(r.err, "Paste the provider token and press enter."); err != nil {
 			return "", err
@@ -138,10 +141,7 @@ func (r *runner) readProviderToken() (string, error) {
 
 func (r *runner) modsCredentials(target modsTarget, args []string) int {
 	if tokenFlagValue(args) {
-		if _, err := fmt.Fprintln(r.err, "genos: read the provider token from stdin; do not pass --token"); err != nil {
-			return r.fail(err)
-		}
-		return 2
+		return r.usage("read the provider token from stdin; do not pass --token")
 	}
 	rest, flags, err := splitModsFlags(args, map[string]bool{
 		"--username": true, "--expected-setup": true,

@@ -74,3 +74,7 @@ Before passing `--yes`, name the server and the action. Do not hide a stop, forc
 API origin defaults to `https://genosservers.com`. Optional `GENOS_HOST` is a debug/local override; otherwise `currentHost` in `$XDG_CONFIG_HOME/genos/config.toml` is used when set. `GENOS_TOKEN` overrides stored credentials and must not be written to disk. Do not read `~/.config/genos/local.env`.
 
 If stdin is not a terminal and a confirmation is required, the command exits without sending the action. Pass `--yes` only after the server and the action have been named.
+
+## Exit codes and non-interactive use
+
+Authenticate agents with `GENOS_TOKEN`, not `genos auth login`: under no-input, login still waits (up to the device-code expiry) for a human to approve. Run as an agent with `--no-input` (or `GENOS_NONINTERACTIVE=1`): genos never prompts, never reads a secret from the terminal, and never opens a browser; pipe tokens on stdin. Branch on the exit code (`genos help exit-codes`): 0 ok, 1 failure, 2 usage, 3 confirmation/input required (name the server and action, then re-run with `--yes`; or pipe the token on stdin), 4 auth (set `GENOS_TOKEN`), 5 forbidden, 6 not found, 7 conflict (re-read state, retry), 8 rate limited, 9 network. With `--json`, a failure prints one line on stderr: `{"error":{"code","message","http_status","api_code","hint","exit_code"}}`.

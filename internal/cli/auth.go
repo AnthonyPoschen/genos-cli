@@ -35,9 +35,12 @@ func (r *runner) login() int {
 	if _, err := fmt.Fprintf(r.out, "user code: %s\n%s\n", code.UserCode, approval); err != nil {
 		return r.fail(err)
 	}
-	if r.opts.OpenURL != nil {
+	switch {
+	case !r.interactive():
+		_, _ = fmt.Fprintln(r.err, "genos: open the URL above to approve; not opening a browser (--no-input)")
+	case r.opts.OpenURL != nil:
 		r.opts.OpenURL(approval)
-	} else {
+	default:
 		openBrowser(approval)
 	}
 	interval := time.Duration(code.Interval) * time.Second
@@ -58,6 +61,9 @@ func (r *runner) login() int {
 }
 
 func (r *runner) storeStdin() int {
+	if err := r.requireInput("access token"); err != nil {
+		return r.fail(err)
+	}
 	if r.terminal() {
 		if _, err := fmt.Fprintln(r.err, "Paste access token and press enter."); err != nil {
 			return r.fail(err)
@@ -112,7 +118,7 @@ func (r *runner) authStatus() int {
 	})
 	if err != nil {
 		if errors.Is(err, creds.ErrNotFound) {
-			return r.fail(fmt.Errorf("no token for %s", origin))
+			return r.fail(noTokenError(origin))
 		}
 		return r.fail(err)
 	}
