@@ -122,6 +122,9 @@ func (r *runner) authStatus() int {
 		}
 		return r.fail(err)
 	}
+	if r.jsonOut {
+		return r.printJSON(map[string]string{"origin": origin, "source": resolved.Source, "prefix": creds.Prefix(resolved.Token)})
+	}
 	if _, err := fmt.Fprintf(r.out, "origin: %s\nsource: %s\nprefix: %s\n", origin, resolved.Source, creds.Prefix(resolved.Token)); err != nil {
 		return r.fail(err)
 	}

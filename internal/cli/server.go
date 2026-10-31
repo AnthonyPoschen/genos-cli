@@ -26,6 +26,9 @@ func (r *runner) servers(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
+	if r.jsonOut {
+		return r.printJSON(map[string]any{"servers": servers})
+	}
 	if len(servers) == 0 {
 		WriteEmpty(r.out, "No servers.")
 		return 0
@@ -54,6 +57,9 @@ func (r *runner) status(args []string) int {
 	server, err := client.GetServer(ctx, args[0])
 	if err != nil {
 		return r.fail(err)
+	}
+	if r.jsonOut {
+		return r.printJSON(server)
 	}
 	WriteTable(r.out, []string{"ID", "NAME", "GAME", "STATUS"}, [][]string{{
 		server.ID, server.Name, server.Game.Name, server.Status,

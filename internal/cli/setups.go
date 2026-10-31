@@ -27,6 +27,9 @@ func (r *runner) setups(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
+	if r.jsonOut {
+		return r.printJSON(chooser)
+	}
 	if len(chooser.Setups) == 0 {
 		WriteEmpty(r.out, "No profiles.")
 	} else {

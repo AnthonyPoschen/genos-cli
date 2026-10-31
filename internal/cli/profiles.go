@@ -25,6 +25,9 @@ func (r *runner) profilesList(args []string) int {
 	if err != nil {
 		return r.fail(err)
 	}
+	if r.jsonOut {
+		return r.printJSON(map[string]any{"profiles": dashboard.Profiles, "profileCapacity": dashboard.ProfileCapacity})
+	}
 	if len(dashboard.Profiles) == 0 {
 		WriteEmpty(r.out, "No profiles.")
 	} else {

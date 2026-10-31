@@ -85,6 +85,12 @@ genos schema <gameID>
 
 `start` does not prompt. `stop` asks `Stop <name>?` unless `--yes`. `force-stop` asks for confirmation that mentions unsaved progress unless `--yes`, then tells the API that unsaved progress may be lost. `restart` asks when `playerCount` is greater than zero or `notableUpdates` is not empty, unless `--yes`. If a prompt is required, stdin is not a terminal, and `--yes` was not passed, genos exits without sending the action.
 
+## Machine-readable output
+
+Every read command accepts `--json`: stdout is then exactly one JSON object and nothing else. Commands that print a table by default switch to JSON (`server list` → `{"servers":[…]}`, `server status` → the server object, `server profile list` → the setup chooser body, `profile list` → `{"profiles":[…],"profileCapacity":{…}}`, `auth status` → `{"origin","source","prefix"}`, plus `me`, `catalog`, `auth tokens`). Commands that already print JSON (`dashboard`, `schema`, `server plan`, `config get`, mods `list/search/show`, saves `*-status`, `profile games`, `profile copy destinations/status`, `rcon broadcast-status`) accept `--json` as a no-op, so an agent can always pass it.
+
+`genos commands --json` prints `{"commands":[…]}`, one entry per runnable command, generated from the command tree: `path`, `use`, `short`, `read_only`, `mutating` (always `!read_only`), `json`, `has_yes_flag`, and `flags` (`name`, `type`, `default`, `usage`). `has_yes_flag` only says the command has a `--yes` confirmation flag. Lacking `--yes` does **not** mean a command is safe: `rcon send`, `server config put` and `auth token-create` change state without one. Use `mutating` to decide. `genos commands` without `--json` prints a COMMAND/DESCRIPTION table.
+
 ## Exit codes, JSON errors, and no-input mode
 
 Exit codes are stable (`genos help exit-codes`):
@@ -102,7 +108,7 @@ Exit codes are stable (`genos help exit-codes`):
 | 8 | rate_limited | API 429 |
 | 9 | network | the API could not be reached |
 
-On commands that accept `--json` (`me`, `catalog`, `auth tokens`), a failure prints exactly one JSON object on stderr (stdout stays empty for the error):
+On commands that accept `--json` (every read command; see below), a failure prints exactly one JSON object on stderr (stdout stays empty for the error):
 
 ```json
 {"error":{"code":"not_found","message":"not_found: server not found","http_status":404,"api_code":"not_found","exit_code":6}}
